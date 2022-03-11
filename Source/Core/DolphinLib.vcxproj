@@ -40,6 +40,24 @@
   <ItemGroup>
     <ClCompile Include="Core\Brawlback\BrawlbackUtility.cpp" />
     <ClCompile Include="Core\Brawlback\Netplay\Matchmaking.cpp" />
+
+    
+    
+
+    <ClCompile Include="Core\Brawlback\ggpo\game_input.cpp" />
+    <ClCompile Include="Core\Brawlback\ggpo\input_queue.cpp" />
+    <ClCompile Include="Core\Brawlback\ggpo\log.cpp" />
+    <ClCompile Include="Core\Brawlback\ggpo\poll.cpp" />
+    <ClCompile Include="Core\Brawlback\ggpo\sync.cpp" />
+    <ClCompile Include="Core\Brawlback\ggpo\ggpo_timesync.cpp" />
+    <ClCompile Include="Core\Brawlback\ggpo\backends\p2p.cpp" />
+    <ClCompile Include="Core\Brawlback\ggpo\backends\spectator.cpp" />
+    <ClCompile Include="Core\Brawlback\ggpo\backends\synctest.cpp" />
+    <ClCompile Include="Core\Brawlback\ggpo\network\udp_proto.cpp" />
+    <ClCompile Include="Core\Brawlback\ggpo\network\udp.cpp" />
+    
+    
+
     <ClCompile Include="Core\Brawlback\Savestate.cpp" />
     <ClCompile Include="Core\Brawlback\TimeSync.cpp" />
     <ClCompile Include="Core\Brawlback\SlippiUtility.cpp" />
@@ -49,6 +67,33 @@
   <ItemGroup>
     <ClInclude Include="Core\Brawlback\BrawlbackUtility.h" />
     <ClInclude Include="Core\Brawlback\MemRegions.h" />
+
+    <ClInclude Include="Core\Brawlback\include\ggponet.h" />
+
+    <!--
+
+    <ClCompile Include="Core\Brawlback\ggpo\game_input.h" />
+    <ClCompile Include="Core\Brawlback\ggpo\input_queue.h" />
+    <ClCompile Include="Core\Brawlback\ggpo\log.h" />
+    <ClCompile Include="Core\Brawlback\ggpo\platform_linux.h" />
+    <ClCompile Include="Core\Brawlback\ggpo\platform_windows.h" />
+    <ClCompile Include="Core\Brawlback\ggpo\poll.h" />
+    <ClCompile Include="Core\Brawlback\ggpo\ring_buffer.h" />
+    <ClCompile Include="Core\Brawlback\ggpo\static_buffer.h" />
+    <ClCompile Include="Core\Brawlback\ggpo\sync.h" />
+    <ClCompile Include="Core\Brawlback\ggpo\timesync.h" />
+    <ClCompile Include="Core\Brawlback\ggpo\types.h" />
+    <ClCompile Include="Core\Brawlback\ggpo\zconf.h" />
+    <ClCompile Include="Core\Brawlback\ggpo\zlib.h" />
+    <ClCompile Include="Core\Brawlback\ggpo\backends\backend.h" />
+    <ClCompile Include="Core\Brawlback\ggpo\backends\p2p.h" />
+    <ClCompile Include="Core\Brawlback\ggpo\backends\spectator.h" />
+    <ClCompile Include="Core\Brawlback\ggpo\backends\synctest.h" />
+    <ClCompile Include="Core\Brawlback\ggpo\network\udp_msg.h" />
+    <ClCompile Include="Core\Brawlback\ggpo\network\udp_proto.h" />
+    <ClCompile Include="Core\Brawlback\ggpo\network\udp.h" />
+    -->
+
     <ClInclude Include="Core\Brawlback\Netplay\Matchmaking.h" />
     <ClInclude Include="Core\Brawlback\Brawltypes.h" />
     <ClInclude Include="Core\Brawlback\Savestate.h" />
