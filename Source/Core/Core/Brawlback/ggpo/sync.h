@@ -19,7 +19,7 @@
 
 class SyncTestBackend;
 
-class Sync {
+class GGPOSync {
 public:
    struct Config {
       GGPOSessionCallbacks    callbacks;
@@ -39,8 +39,8 @@ public:
    };
 
 public:
-   Sync(UdpMsg::connect_status *connect_status);
-   virtual ~Sync();
+   GGPOSync(UdpMsg::connect_status *connect_status);
+   virtual ~GGPOSync();
 
    void Init(Config &config);
 

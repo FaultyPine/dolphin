@@ -12,7 +12,7 @@
 #include "udp.h"
 #include "udp_msg.h"
 #include "../game_input.h"
-#include "../timesync.h"
+#include "../ggpo_timesync.h"
 #include "../../include/ggponet.h"
 #include "../ring_buffer.h"
 
@@ -196,7 +196,7 @@ protected:
    /*
     * Rift synchronization.
     */
-   TimeSync                   _timesync;
+   GGPOTimeSync                   _timesync;
 
    /*
     * Event queue

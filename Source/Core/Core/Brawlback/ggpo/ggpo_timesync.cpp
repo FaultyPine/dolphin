@@ -5,21 +5,21 @@
  * in the LICENSE file.
  */
 
-#include "timesync.h"
+#include "ggpo_timesync.h"
 
-TimeSync::TimeSync()
+GGPOTimeSync::GGPOTimeSync()
 {
    memset(_local, 0, sizeof(_local));
    memset(_remote, 0, sizeof(_remote));
    _next_prediction = FRAME_WINDOW_SIZE * 3;
 }
 
-TimeSync::~TimeSync()
+GGPOTimeSync::~GGPOTimeSync()
 {
 }
 
 void
-TimeSync::advance_frame(GameInput &input, int advantage, int radvantage)
+GGPOTimeSync::advance_frame(GameInput &input, int advantage, int radvantage)
 {
    // Remember the last frame and frame advantage
    _last_inputs[input.frame % ARRAY_SIZE(_last_inputs)] = input;
@@ -28,7 +28,7 @@ TimeSync::advance_frame(GameInput &input, int advantage, int radvantage)
 }
 
 int
-TimeSync::recommend_frame_wait_duration(bool require_idle_input)
+GGPOTimeSync::recommend_frame_wait_duration(bool require_idle_input)
 {
    // Average our local and remote frame advantages
    int i, sum = 0;

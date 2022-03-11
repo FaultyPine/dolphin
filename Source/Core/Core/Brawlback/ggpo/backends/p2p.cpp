@@ -31,7 +31,7 @@ Peer2PeerBackend::Peer2PeerBackend(GGPOSessionCallbacks *cb,
    /*
     * Initialize the synchronziation layer
     */
-   Sync::Config config = { 0 };
+   GGPOSync::Config config = { 0 };
    config.num_players = num_players;
    config.input_size = input_size;
    config.callbacks = _callbacks;
@@ -341,7 +341,7 @@ Peer2PeerBackend::IncrementFrame(void)
 void
 Peer2PeerBackend::PollSyncEvents(void)
 {
-   Sync::Event e;
+   GGPOSync::Event e;
    while (_sync.GetEvent(e)) {
       OnSyncEvent(e);
    }

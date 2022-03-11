@@ -16,10 +16,10 @@
 #define MIN_FRAME_ADVANTAGE          3
 #define MAX_FRAME_ADVANTAGE          9
 
-class TimeSync {
+class GGPOTimeSync {
 public:
-   TimeSync();
-   virtual ~TimeSync ();
+   GGPOTimeSync();
+   virtual ~GGPOTimeSync ();
 
    void advance_frame(GameInput &input, int advantage, int radvantage);
    int recommend_frame_wait_duration(bool require_idle_input);

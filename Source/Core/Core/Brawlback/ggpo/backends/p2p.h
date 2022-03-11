@@ -12,7 +12,7 @@
 #include "../poll.h"
 #include "../sync.h"
 #include "backend.h"
-#include "../timesync.h"
+#include "../ggpo_timesync.h"
 #include "../network/udp_proto.h"
 
 class Peer2PeerBackend : public IQuarkBackend, IPollSink, Udp::Callbacks {
@@ -48,7 +48,7 @@ protected:
    int PollNPlayers(int current_frame);
    void AddRemotePlayer(char *remoteip, uint16 reportport, int queue);
    GGPOErrorCode AddSpectator(char *remoteip, uint16 reportport);
-   virtual void OnSyncEvent(Sync::Event &e) { }
+   virtual void OnSyncEvent(GGPOSync::Event &e) { }
    virtual void OnUdpProtocolEvent(UdpProtocol::Event &e, GGPOPlayerHandle handle);
    virtual void OnUdpProtocolPeerEvent(UdpProtocol::Event &e, int queue);
    virtual void OnUdpProtocolSpectatorEvent(UdpProtocol::Event &e, int queue);
@@ -56,7 +56,7 @@ protected:
 protected:
    GGPOSessionCallbacks  _callbacks;
    Poll                  _poll;
-   Sync                  _sync;
+   GGPOSync                  _sync;
    Udp                   _udp;
    UdpProtocol           *_endpoints;
    UdpProtocol           _spectators[GGPO_MAX_SPECTATORS];

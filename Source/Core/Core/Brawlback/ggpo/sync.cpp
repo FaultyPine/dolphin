@@ -7,7 +7,7 @@
 
 #include "sync.h"
 
-Sync::Sync(UdpMsg::connect_status *connect_status) :
+GGPOSync::GGPOSync(UdpMsg::connect_status *connect_status) :
  _local_connect_status(connect_status),
  _input_queues(NULL)
 {
@@ -17,7 +17,7 @@ Sync::Sync(UdpMsg::connect_status *connect_status) :
    memset(&_savedstate, 0, sizeof(_savedstate));
 }
 
-Sync::~Sync()
+GGPOSync::~GGPOSync()
 {
    /*
     * Delete frames manually here rather than in a destructor of the SavedFrame
@@ -31,7 +31,7 @@ Sync::~Sync()
 }
 
 void
-Sync::Init(Sync::Config &config)
+GGPOSync::Init(GGPOSync::Config &config)
 {
    _config = config;
    _callbacks = config.callbacks;
@@ -44,7 +44,7 @@ Sync::Init(Sync::Config &config)
 }
 
 void
-Sync::SetLastConfirmedFrame(int frame) 
+GGPOSync::SetLastConfirmedFrame(int frame) 
 {   
    _last_confirmed_frame = frame;
    if (_last_confirmed_frame > 0) {
@@ -55,7 +55,7 @@ Sync::SetLastConfirmedFrame(int frame)
 }
 
 bool
-Sync::AddLocalInput(int queue, GameInput &input)
+GGPOSync::AddLocalInput(int queue, GameInput &input)
 {
    int frames_behind = _framecount - _last_confirmed_frame; 
    if (_framecount >= _max_prediction_frames && frames_behind >= _max_prediction_frames) {
@@ -75,13 +75,13 @@ Sync::AddLocalInput(int queue, GameInput &input)
 }
 
 void
-Sync::AddRemoteInput(int queue, GameInput &input)
+GGPOSync::AddRemoteInput(int queue, GameInput &input)
 {
    _input_queues[queue].AddInput(input);
 }
 
 int
-Sync::GetConfirmedInputs(void *values, int size, int frame)
+GGPOSync::GetConfirmedInputs(void *values, int size, int frame)
 {
    int disconnect_flags = 0;
    char *output = (char *)values;
@@ -103,7 +103,7 @@ Sync::GetConfirmedInputs(void *values, int size, int frame)
 }
 
 int
-Sync::SynchronizeInputs(void *values, int size)
+GGPOSync::SynchronizeInputs(void *values, int size)
 {
    int disconnect_flags = 0;
    char *output = (char *)values;
@@ -125,7 +125,7 @@ Sync::SynchronizeInputs(void *values, int size)
 }
 
 void
-Sync::CheckSimulation(int timeout)
+GGPOSync::CheckSimulation(int timeout)
 {
    int seek_to;
    if (!CheckSimulationConsistency(&seek_to)) {
@@ -134,14 +134,14 @@ Sync::CheckSimulation(int timeout)
 }
 
 void
-Sync::IncrementFrame(void)
+GGPOSync::IncrementFrame(void)
 {
    _framecount++;
    SaveCurrentFrame();
 }
 
 void
-Sync::AdjustSimulation(int seek_to)
+GGPOSync::AdjustSimulation(int seek_to)
 {
    int framecount = _framecount;
    int count = _framecount - seek_to;
@@ -171,7 +171,7 @@ Sync::AdjustSimulation(int seek_to)
 }
 
 void
-Sync::LoadFrame(int frame)
+GGPOSync::LoadFrame(int frame)
 {
    // find the frame in question
    if (frame == _framecount) {
@@ -196,7 +196,7 @@ Sync::LoadFrame(int frame)
 }
 
 void
-Sync::SaveCurrentFrame()
+GGPOSync::SaveCurrentFrame()
 {
    /*
     * See StateCompress for the real save feature implemented by FinalBurn.
@@ -214,8 +214,8 @@ Sync::SaveCurrentFrame()
    _savedstate.head = (_savedstate.head + 1) % ARRAY_SIZE(_savedstate.frames);
 }
 
-Sync::SavedFrame&
-Sync::GetLastSavedFrame()
+GGPOSync::SavedFrame&
+GGPOSync::GetLastSavedFrame()
 {
    int i = _savedstate.head - 1;
    if (i < 0) {
@@ -226,7 +226,7 @@ Sync::GetLastSavedFrame()
 
 
 int
-Sync::FindSavedFrameIndex(int frame)
+GGPOSync::FindSavedFrameIndex(int frame)
 {
    int i, count = ARRAY_SIZE(_savedstate.frames);
    for (i = 0; i < count; i++) {
@@ -242,7 +242,7 @@ Sync::FindSavedFrameIndex(int frame)
 
 
 bool
-Sync::CreateQueues(Config &config)
+GGPOSync::CreateQueues(Config &config)
 {
    delete [] _input_queues;
    _input_queues = new InputQueue[_config.num_players];
@@ -254,7 +254,7 @@ Sync::CreateQueues(Config &config)
 }
 
 bool
-Sync::CheckSimulationConsistency(int *seekTo)
+GGPOSync::CheckSimulationConsistency(int *seekTo)
 {
    int first_incorrect = GameInput::NullFrame;
    for (int i = 0; i < _config.num_players; i++) {
@@ -275,14 +275,14 @@ Sync::CheckSimulationConsistency(int *seekTo)
 }
 
 void
-Sync::SetFrameDelay(int queue, int delay)
+GGPOSync::SetFrameDelay(int queue, int delay)
 {
    _input_queues[queue].SetFrameDelay(delay);
 }
 
 
 void
-Sync::ResetPrediction(int frameNumber)
+GGPOSync::ResetPrediction(int frameNumber)
 {
    for (int i = 0; i < _config.num_players; i++) {
       _input_queues[i].ResetPrediction(frameNumber);
@@ -291,7 +291,7 @@ Sync::ResetPrediction(int frameNumber)
 
 
 bool
-Sync::GetEvent(Event &e)
+GGPOSync::GetEvent(Event &e)
 {
    if (_event_queue.size()) {
       e = _event_queue.front();

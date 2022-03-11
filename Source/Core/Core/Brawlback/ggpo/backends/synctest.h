@@ -13,6 +13,8 @@
 #include "../sync.h"
 #include "../ring_buffer.h"
 
+#pragma warning(disable: 4263)
+
 class SyncTestBackend : public IQuarkBackend {
 public:
    SyncTestBackend(GGPOSessionCallbacks *cb, char *gamename, int frames, int num_players);
@@ -41,7 +43,7 @@ protected:
 
 protected:
    GGPOSessionCallbacks   _callbacks;
-   Sync                   _sync;
+   GGPOSync                   _sync;
    int                    _num_players;
    int                    _check_distance;
    int                    _last_verified;

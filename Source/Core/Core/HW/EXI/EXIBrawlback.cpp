@@ -7,7 +7,7 @@
 #include <chrono>
 #include <iostream>
 #include "VideoCommon/OnScreenDisplay.h"
-
+#include "Core/Brawlback/ggpo/ggpo_main.h"
 
 // --- Mutexes
 std::mutex read_queue_mutex = std::mutex();
@@ -861,13 +861,15 @@ void CEXIBrawlback::NetplayThreadFunc() {
 
 void CEXIBrawlback::MatchmakingThreadFunc()
 {
-  while (this->matchmaking)
+  bool connected = true;
+  while (this->matchmaking && !connected)
   {
     switch (this->matchmaking->GetMatchmakeState())
     {
     case Matchmaking::ProcessState::OPPONENT_CONNECTING:
       this->matchmaking->SetMatchmakeState(Matchmaking::ProcessState::CONNECTION_SUCCESS);
       this->connectToOpponent();
+      connected = true;
       break;
     case Matchmaking::ProcessState::ERROR_ENCOUNTERED:
       ERROR_LOG(BRAWLBACK, "MATCHMAKING: ERROR TRYING TO CONNECT!");
