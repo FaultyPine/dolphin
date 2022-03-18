@@ -45,6 +45,7 @@
     
 
     <ClCompile Include="Core\Brawlback\ggpo\game_input.cpp" />
+    <ClCompile Include="Core\Brawlback\ggpo\ggpo_main.cpp" />
     <ClCompile Include="Core\Brawlback\ggpo\bitvector.cpp" />
     <ClCompile Include="Core\Brawlback\ggpo\input_queue.cpp" />
     <ClCompile Include="Core\Brawlback\ggpo\log.cpp" />

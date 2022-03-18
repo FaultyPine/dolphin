@@ -7,7 +7,6 @@
 #include <chrono>
 #include <iostream>
 #include "VideoCommon/OnScreenDisplay.h"
-#include "Core/Brawlback/ggpo/ggpo_main.h"
 
 // --- Mutexes
 std::mutex read_queue_mutex = std::mutex();
@@ -15,8 +14,148 @@ std::mutex remotePadQueueMutex = std::mutex();
 std::mutex localPadQueueMutex = std::mutex();
 // -------------------------------
 
+GGPOSession* ggpo;
+GGPOPlayerHandle player_handles[MAX_NUM_PLAYERS];
+
+std::string GGPOErrorCodeToString(GGPOErrorCode code) {
+    switch(code) {
+        case 0:
+            return "Success";
+        case GGPO_ERRORCODE_GENERAL_FAILURE:
+            return "General failure";
+        case GGPO_ERRORCODE_INVALID_SESSION:
+            return "Invalid session";
+        case GGPO_ERRORCODE_INVALID_PLAYER_HANDLE:
+            return "Invalid player handle";
+        case GGPO_ERRORCODE_PLAYER_OUT_OF_RANGE:
+            return "Player out of range";
+        case GGPO_ERRORCODE_PREDICTION_THRESHOLD:
+            return "Prediction threshold";
+        case GGPO_ERRORCODE_UNSUPPORTED:
+            return "Unsupported";
+        case GGPO_ERRORCODE_NOT_SYNCHRONIZED:
+            return "Not synchronized";
+        case GGPO_ERRORCODE_IN_ROLLBACK:
+            return "In rollback";
+        case GGPO_ERRORCODE_INPUT_DROPPED:
+            return "Input dropped";
+        case GGPO_ERRORCODE_PLAYER_DISCONNECTED:
+            return "Player disconnected";
+        case GGPO_ERRORCODE_TOO_MANY_SPECTATORS:
+            return "Too many spectators";
+        case GGPO_ERRORCODE_INVALID_REQUEST:
+            return "Invalid request";
+        default:
+            return "NA";
+    }
+}
+
+bool LoadSavestate(s32 frame, 
+                   SavestateMap& activeSavestates, 
+                   SavestateQueue& availableSavestates
+                  );
+void CaptureSavestate(s32 frame, 
+                      SavestateMap& activeSavestates, 
+                      SavestateQueue& availableSavestates
+                      );
+
+SavestateMap CEXIBrawlback::activeSavestates = {};
+SavestateQueue CEXIBrawlback::availableSavestates = {};
+s32 CEXIBrawlback::currentFrame = -1;
+
+SavestateMap* CEXIBrawlback::getActiveSavestates() { return &activeSavestates; }
+SavestateQueue* CEXIBrawlback::getAvailableSavestates() { return &availableSavestates; }
+s32 CEXIBrawlback::getCurrentFrame() { return currentFrame; }
+
+// --- GGPO
+static int numFramesToSim = 0;
+
+bool vw_begin_game_callback(const char* game) {
+    // DEPRECATED - DO NOT IMPL
+    INFO_LOG(BRAWLBACK, "GGPO called deprecated begin_game_callback\n");
+    return true;
+}
+
+
+bool vw_advance_frame_callback(int flags) {
+    //INFO_LOG(BRAWLBACK, "GGPO advance_frame callback\n");
+
+    numFramesToSim++;
+    INFO_LOG(BRAWLBACK, "num frames to sim inc - new val: %i\n", numFramesToSim);
+
+    //u8* gameProcFuncAddr = Memory::GetPointer(0x80017618);
+    //void* gfApplication = Memory::GetPointer(0x805b4fd8);
+    //((unsigned int (*)(void* gfApplication, u32 iterIdx))gameProcFuncAddr)(gfApplication, 0);
+
+    return true;
+}
+bool vw_load_game_state_callback(unsigned char *buffer, int len) {
+    int rbBeginFrame = *((int*)buffer);
+    INFO_LOG(BRAWLBACK, "GGPO load_game_state callback. For frame %i\n", rbBeginFrame);
+    LoadSavestate(rbBeginFrame, *CEXIBrawlback::getActiveSavestates(), *CEXIBrawlback::getAvailableSavestates());
+
+    return true;
+}
+bool vw_save_game_state_callback(unsigned char **buffer, int *len, int *checksum, int frame) {
+    INFO_LOG(BRAWLBACK, "GGPO save_game_state callback. Frame %i\n", frame);
+
+    *len = sizeof(int); // our "savestate" here is just the frame, since we manage our own savestate buffers
+    *buffer = (u8*)malloc(*len);
+    memcpy(*buffer, &frame, *len);
+
+    CaptureSavestate(frame, *CEXIBrawlback::getActiveSavestates(), *CEXIBrawlback::getAvailableSavestates());
+    return true;
+}
+void vw_free_buffer(void* buffer) {
+    INFO_LOG(BRAWLBACK, "GGPO free_buffer callback\n");
+    free(buffer);
+}
+bool vw_on_event_callback(GGPOEvent* info) {
+    INFO_LOG(BRAWLBACK, "GGPO on_event callback. EventCode: %u   \n", info->code);
+
+    switch (info->code) {
+        case GGPO_EVENTCODE_CONNECTED_TO_PEER:
+            INFO_LOG(BRAWLBACK, "GGPO Connected to peer! Player handle: %i\n", info->u.connected.player);
+            break;
+        case GGPO_EVENTCODE_SYNCHRONIZING_WITH_PEER:
+            INFO_LOG(BRAWLBACK, "GGPO Syncronizing with peer! count: %i total: %i player: %i\n", info->u.synchronizing.count, info->u.synchronizing.total, info->u.synchronizing.player);
+            break;
+        case GGPO_EVENTCODE_SYNCHRONIZED_WITH_PEER:
+            INFO_LOG(BRAWLBACK, "GGPO Synchronized with peer! Player handle: %i\n", info->u.synchronized.player);
+            break;
+        case GGPO_EVENTCODE_RUNNING:
+            INFO_LOG(BRAWLBACK, "GGPO Running!\n");
+            break;
+        case GGPO_EVENTCODE_DISCONNECTED_FROM_PEER:
+            INFO_LOG(BRAWLBACK, "GGPO Disconnected from peer! Player handle: %i\n", info->u.disconnected.player);
+            break;
+        case GGPO_EVENTCODE_TIMESYNC:
+            {
+                int sleep_ms = 1000 * info->u.timesync.frames_ahead / 60;
+                INFO_LOG(BRAWLBACK, "GGPO Timesync! Frames ahead: %i  Sleeping for %i ms\n", info->u.timesync.frames_ahead, sleep_ms);
+                Common::SleepCurrentThread(sleep_ms);
+            }
+            break;
+        case GGPO_EVENTCODE_CONNECTION_INTERRUPTED:
+            INFO_LOG(BRAWLBACK, "GGPO Connection interrupted! Disconnect timeout: %i  player handle: %i\n", info->u.connection_interrupted.disconnect_timeout, info->u.disconnected.player);
+            break;
+        case GGPO_EVENTCODE_CONNECTION_RESUMED:
+            INFO_LOG(BRAWLBACK, "GGPO Connection resumed! Player handle: %i\n", info->u.connection_resumed.player);
+            break;
+        default:
+            break;
+    }
+
+    return true;
+}
+
+// GGPO ---
+
 CEXIBrawlback::CEXIBrawlback()
 {
+    currentFrame = 0;
+
+
     INFO_LOG(BRAWLBACK, "------- %s\n", SConfig::GetInstance().GetGameID().c_str());
 #ifdef _WIN32
     if (std::filesystem::exists(Sync::getSyncLogFilePath())) {
@@ -88,14 +227,12 @@ CEXIBrawlback::~CEXIBrawlback()
 }
 
 
-
-void CEXIBrawlback::handleCaptureSavestate(u8* data)
+void CaptureSavestate(s32 frame, 
+                      SavestateMap& activeSavestates, 
+                      SavestateQueue& availableSavestates
+                      )
 {
-
     u64 startTime = Common::Timer::GetTimeUs();
-
-    int idx = 0;
-    s32 frame = (s32)SlippiUtility::Mem::readWord(data, idx, 999, 0);
     
     if (frame % 30 == 0) {
         static int dump_num = 0;
@@ -150,29 +287,27 @@ void CEXIBrawlback::handleCaptureSavestate(u8* data)
     INFO_LOG(BRAWLBACK, "Captured savestate for frame %d in: %f ms", frame, ((double)timeDiff) / 1000);
 }
 
-void CEXIBrawlback::handleLoadSavestate(u8* data)
+
+void CEXIBrawlback::handleCaptureSavestate(u8* data)
 {
+    s32 frame = (s32)SlippiUtility::Mem::readWord(data);
+    CaptureSavestate(frame, this->activeSavestates, this->availableSavestates);
+}
 
-    Match::RollbackInfo* loadStateRollbackInfo = (Match::RollbackInfo*)data;
-    // the frame we should load state for is the frame we first began not receiving inputs
-    //u32 frame = Common::swap32(loadStateRollbackInfo->beginFrame);
-    s32 frame = (s32)SlippiUtility::Mem::readWord((u8*)&loadStateRollbackInfo->beginFrame);
 
+bool LoadSavestate(s32 frame, 
+                   SavestateMap& activeSavestates, 
+                   SavestateQueue& availableSavestates
+                  )
+{
     //INFO_LOG(BRAWLBACK, "Attempting to load state for frame %i\n", frame);
 
     //u32* preserveArr = (u32*)loadStateRollbackInfo->preserveBlocks.data();
 
 	if (!activeSavestates.count(frame))
 	{
-		// This savestate does not exist - just disconnect and throw hands :/
-        ERROR_LOG(BRAWLBACK, "Savestate for frame %i does not exist.", frame);
-        PanicAlertFmtT("Savestate for frame {0} does not exist.", frame);
-        this->isConnected = false;
-        for (int i = 0; i < this->server->peerCount; i++) {
-            enet_peer_disconnect(&this->server->peers[i], 0);
-        }
-        // in the future, exit out of the match or something here
-		return;
+		// savestate doesn't exist
+		return false;
 	}
 
 	u64 startTime = Common::Timer::GetTimeUs();
@@ -207,6 +342,27 @@ void CEXIBrawlback::handleLoadSavestate(u8* data)
 
 	u32 timeDiff = (u32)(Common::Timer::GetTimeUs() - startTime);
     INFO_LOG(BRAWLBACK, "Loaded savestate for frame %d in: %f ms", frame, ((double)timeDiff) / 1000);
+    return true;
+}
+
+void CEXIBrawlback::handleLoadSavestate(u8* data)
+{
+
+    Match::RollbackInfo* loadStateRollbackInfo = (Match::RollbackInfo*)data;
+    // the frame we should load state for is the frame we first began not receiving inputs
+    //u32 frame = Common::swap32(loadStateRollbackInfo->beginFrame);
+    s32 frame = (s32)SlippiUtility::Mem::readWord((u8*)&loadStateRollbackInfo->beginFrame);
+
+    if (!LoadSavestate(frame, this->activeSavestates, this->availableSavestates)) {
+        // This savestate does not exist - just disconnect and throw hands :/
+        ERROR_LOG(BRAWLBACK, "Savestate for frame %i does not exist.", frame);
+        PanicAlertFmtT("Savestate for frame {0} does not exist.", frame);
+        this->isConnected = false;
+        for (int i = 0; i < this->server->peerCount; i++) {
+            enet_peer_disconnect(&this->server->peers[i], 0);
+        }
+        // in the future, exit out of the match or something here
+    }
 }
 
 template <typename T>
@@ -239,9 +395,8 @@ Match::PlayerFrameData CreateDummyPlayerFrameData(u32 frame, u8 playerIdx) {
 void CEXIBrawlback::handleLocalPadData(u8* data)
 {
     Match::PlayerFrameData* playerFramedata = (Match::PlayerFrameData*)data;
-    int idx = 0;
-    // first 4 bytes are current game frame
-    u32 frame = SlippiUtility::Mem::readWord(data, idx, 999, 0); // properly switched endianness
+    u32 frame = SlippiUtility::Mem::readWord((u8*)&playerFramedata->frame); // properly switched endianness
+
     u8 playerIdx = playerFramedata->playerIdx;
     playerFramedata->frame = frame; // properly switched endianness
 
@@ -288,13 +443,6 @@ void CEXIBrawlback::handleLocalPadData(u8* data)
     if (this->rollbackInfo.pastFrameDataPopulated) {
         this->SendCmdToGame(EXICommand::CMD_ROLLBACK, &this->rollbackInfo);
         this->rollbackInfo.Reset(); // reset rollbackInfo
-        /*for (Match::FrameData fd : rollbackInfo.pastFrameDatas) {
-            if (fd.playerFrameDatas[0].frame != 0) {
-                for (int i = 0; i < 2; i++) {
-                    Sync::SyncLog(Sync::stringifyFramedata(fd.playerFrameDatas[i]));
-                }
-            }
-        }*/
         return;
     }
     #endif
@@ -861,68 +1009,139 @@ void CEXIBrawlback::NetplayThreadFunc() {
 
 void CEXIBrawlback::MatchmakingThreadFunc()
 {
-  bool connected = true;
-  while (this->matchmaking && !connected)
-  {
-    switch (this->matchmaking->GetMatchmakeState())
+    bool should_break = false;
+    while (this->matchmaking && !should_break)
     {
-    case Matchmaking::ProcessState::OPPONENT_CONNECTING:
-      this->matchmaking->SetMatchmakeState(Matchmaking::ProcessState::CONNECTION_SUCCESS);
-      this->connectToOpponent();
-      connected = true;
-      break;
-    case Matchmaking::ProcessState::ERROR_ENCOUNTERED:
-      ERROR_LOG(BRAWLBACK, "MATCHMAKING: ERROR TRYING TO CONNECT!");
-      return;
-      break;
-    default:
-      break;
+        switch (this->matchmaking->GetMatchmakeState())
+        {
+        case Matchmaking::ProcessState::OPPONENT_CONNECTING:
+            this->matchmaking->SetMatchmakeState(Matchmaking::ProcessState::CONNECTION_SUCCESS);
+            this->connectToOpponent();
+            should_break = true;
+            break;
+        case Matchmaking::ProcessState::ERROR_ENCOUNTERED:
+            ERROR_LOG(BRAWLBACK, "MATCHMAKING: ERROR TRYING TO CONNECT!");
+            should_break = false;
+            return;
+        default:
+            break;
+        }
     }
-  }
-  INFO_LOG(BRAWLBACK, "~~~~~~~~~~~~~~ END MATCHMAKING THREAD ~~~~~~~~~~~~~~\n");
+    INFO_LOG(BRAWLBACK, "~~~~~~~~~~~~~~ END MATCHMAKING THREAD ~~~~~~~~~~~~~~\n");
 }
 
 void CEXIBrawlback::connectToOpponent() {
-  this->isHost = this->matchmaking->IsHost();
+    INFO_LOG(BRAWLBACK, "Connecting to opponent\n");
+    this->isHost = this->matchmaking->IsHost();
+    this->localPlayerIdx = this->matchmaking->LocalPlayerIndex();
+    int remotePlayerIdx = 1-localPlayerIdx;
 
-  if(this->isHost) {
-    INFO_LOG(BRAWLBACK, "Matchmaking: Creating server...");
-    ENetAddress address;
-    address.host = ENET_HOST_ANY;
-    address.port = this->matchmaking->GetLocalPort();
+    if(this->isHost) {
+        INFO_LOG(BRAWLBACK, "Matchmaking: Creating server...");
+        ENetAddress address;
+        address.host = ENET_HOST_ANY;
+        address.port = this->matchmaking->GetLocalPort();
 
-    this->server = enet_host_create(&address, 10, 3, 0, 0);
+        this->server = enet_host_create(&address, 10, 3, 0, 0);
 
-  } else {
-    INFO_LOG(BRAWLBACK, "Matchmaking: Creating client...");
-    this->server = enet_host_create(NULL, 10, 3, 0, 0);
+    } else {
+        INFO_LOG(BRAWLBACK, "Matchmaking: Creating client...");
+        
+        this->server = enet_host_create(NULL, 10, 3, 0, 0);
 
-    bool connectedToAtLeastOne = false;
-    for(int i=0; i < this->matchmaking->RemotePlayerCount(); i++)
-    {
-      ENetAddress addr;
-      int set_host_res = enet_address_set_host(&addr, this->matchmaking->GetRemoteIPAddresses()[i].c_str());
-      if (set_host_res < 0) {
-        WARN_LOG(BRAWLBACK, "Failed to enet_address_set_host");
-      }
-      addr.port = this->matchmaking->GetRemotePorts()[i];
+        bool connectedToAtLeastOne = false;
+        for(int i=0; i < this->matchmaking->RemotePlayerCount(); i++)
+        {
+            ENetAddress addr;
+            const char* remote_ip = this->matchmaking->GetRemoteIPAddresses()[i].c_str();
+            u16 remote_port = this->matchmaking->GetRemotePorts()[i];
 
-      ENetPeer* peer = enet_host_connect(this->server, &addr, 1, 0);
-      if (peer == NULL) {
-        WARN_LOG(BRAWLBACK, "Failed to enet_host_connect");
-      }
-      connectedToAtLeastOne = true;
+            int set_host_res = enet_address_set_host(&addr, remote_ip);
+            if (set_host_res < 0) {
+                WARN_LOG(BRAWLBACK, "Failed to enet_address_set_host");
+            }
+            addr.port = remote_port;
+
+            ENetPeer* peer = enet_host_connect(this->server, &addr, 1, 0);
+            if (peer == NULL) {
+                WARN_LOG(BRAWLBACK, "Failed to enet_host_connect");
+            }
+            connectedToAtLeastOne = true;
+        }
+        if(!connectedToAtLeastOne) {
+            ERROR_LOG(BRAWLBACK, "Failed to connect to any client/host");
+            return;
+        }
     }
-    if(!connectedToAtLeastOne) {
-      ERROR_LOG(BRAWLBACK, "Failed to connect to any client/host");
-      return;
-    }
-  }
+
+    if (this->server)
+        INFO_LOG(BRAWLBACK, "Local server addr: %u:%u\n", this->server->address.host, (unsigned int)this->server->address.port);
+    else
+        ERROR_LOG(BRAWLBACK, "Failed to init ENetHost!\n");
 
 
-  INFO_LOG(BRAWLBACK, "Net initialized, starting netplay thread");
-  // loop to receive data over net
-  this->netplay_thread = std::thread(&CEXIBrawlback::NetplayThreadFunc, this);
+
+    // ggpo
+
+    GGPOErrorCode result;
+    GGPOSessionCallbacks cb;
+
+    cb.begin_game = vw_begin_game_callback;
+    cb.advance_frame = vw_advance_frame_callback;
+    cb.load_game_state = vw_load_game_state_callback;
+    cb.save_game_state = vw_save_game_state_callback;
+    cb.free_buffer = vw_free_buffer;
+    cb.on_event = vw_on_event_callback;
+
+    result = GGPO::ggpo_start_session(&ggpo,         // the new session object
+                                &cb,           // our callbacks
+                                "Brawlback",    // application name
+                                this->matchmaking->RemotePlayerCount()+1,             // 2 players
+                                sizeof(Match::PlayerFrameData),   // size of an input packet
+                                this->matchmaking->GetLocalPort()+1);         // our local udp port
+    INFO_LOG(BRAWLBACK, ("GGPO Start session: " + GGPOErrorCodeToString(result) + "\n").c_str());
+
+    // automatically disconnect clients after 3000 ms and start our count-down timer
+    // for disconnects after 1000 ms.   To completely disable disconnects, simply use
+    // a value of 0 for ggpo_set_disconnect_timeout.
+    GGPO::ggpo_set_disconnect_timeout(ggpo, 3000);
+    GGPO::ggpo_set_disconnect_notify_start(ggpo, 1000);
+
+    // set frame delay
+    for (GGPOPlayerHandle handle : player_handles)
+        GGPO::ggpo_set_frame_delay(ggpo, handle, FRAME_DELAY);
+
+    GGPOPlayer localPlayer;
+    localPlayer.size = sizeof(GGPOPlayer);
+    localPlayer.type = GGPO_PLAYERTYPE_LOCAL;
+    localPlayer.player_num = localPlayerIdx+1;
+    GGPO::ggpo_add_player(ggpo, &localPlayer, &player_handles[localPlayerIdx]);
+    INFO_LOG(BRAWLBACK, ("GGPO add player (local): " + GGPOErrorCodeToString(result) + "\n").c_str());
+
+
+    //for(int i = 0; i < this->matchmaking->RemotePlayerCount(); i++) {
+        GGPOPlayer remotePlayer;
+
+        std::string remote_ip = matchmaking->GetRemoteIPAddresses()[0];
+        u16 remote_port = this->matchmaking->GetRemotePorts()[0]+1;
+        INFO_LOG(BRAWLBACK, "Making remote player  %s:%u", remote_ip.c_str(), (unsigned int)remote_port);
+
+        remotePlayer.size = sizeof(GGPOPlayer);
+        remotePlayer.type =  GGPO_PLAYERTYPE_REMOTE;
+        remotePlayer.player_num = remotePlayerIdx+1;
+        strcpy(remotePlayer.u.remote.ip_address, remote_ip.c_str());  // ip addess of the player
+        remotePlayer.u.remote.port = remote_port;               // port of that player
+
+        result = GGPO::ggpo_add_player(ggpo, &remotePlayer, &player_handles[remotePlayerIdx]);
+        INFO_LOG(BRAWLBACK, ("GGPO add player (remote): " + GGPOErrorCodeToString(result) + "\n").c_str());
+    //}
+
+    // ---
+
+
+    //INFO_LOG(BRAWLBACK, "Net initialized, starting netplay thread");
+    // loop to receive data over net
+    this->netplay_thread = std::thread(&CEXIBrawlback::NetplayThreadFunc, this);
 }
 
 void CEXIBrawlback::handleFindMatch(u8* payload) {
@@ -1030,6 +1249,80 @@ void CEXIBrawlback::handleStartMatch(u8* payload) {
 }
 
 
+void CEXIBrawlback::RunFrame(Match::PlayerFrameData* localInputs) {
+    // ggpo
+    GGPOErrorCode result;
+    int disconnect_flags = 0;
+    Match::FrameData framedataToSendToGame = Match::FrameData(0);
+    framedataToSendToGame.randomSeed = 0x496ffd00;
+    
+    // TODO: call synchronize_input numFramesToSim # of times and collect inputs for all frames to send to game for sim
+
+    /* notify ggpo of the local player's inputs */
+    result = GGPO::ggpo_add_local_input(ggpo, player_handles[localPlayerIdx], localInputs, sizeof(*localInputs));
+
+    /* synchronize the local and remote inputs */
+    if (GGPO_SUCCEEDED(result)) {
+        result = GGPO::ggpo_synchronize_input(ggpo, framedataToSendToGame.playerFrameDatas, sizeof(*localInputs) * this->matchmaking->RemotePlayerCount()+1, &disconnect_flags);
+        if (GGPO_SUCCEEDED(result)) {
+            INFO_LOG(BRAWLBACK, "Got remote inputs\n");
+            numFramesToSim++;
+        }
+        else {
+            INFO_LOG(BRAWLBACK, ("Failed to ggpo_synchronize_input. " + GGPOErrorCodeToString(result) + ". Timesyncing...\n").c_str());
+            // Timesync
+            numFramesToSim = 0;
+        }
+    }
+    else {
+        INFO_LOG(BRAWLBACK, ("Failed to ggpo_add_local_input. Errorcode: " + GGPOErrorCodeToString(result) + "\n").c_str());
+        numFramesToSim = 0;
+    }
+
+}
+
+void CEXIBrawlback::handleGameProcOverride(u8* data) {
+    this->read_queue.clear();
+    numFramesToSim = 0;
+    GGPOErrorCode result;
+    Match::PlayerFrameData* playerFramedata = (Match::PlayerFrameData*)data;
+    u32 frame = SlippiUtility::Mem::readWord((u8*)&playerFramedata->frame); // properly switched endianness
+    playerFramedata->frame = frame; // properly switched endianness
+    
+    if (!this->server || localPlayerIdx == -1 || !ggpo) {
+        INFO_LOG(BRAWLBACK, "Early frame, not everything is setup yet\n");
+        this->read_queue.push_back(numFramesToSim);
+        return;
+    }
+
+    currentFrame = frame;
+    
+    static s32 next, now = (s32)Common::Timer::GetTimeMs();
+
+    now = Common::Timer::GetTimeMs();
+    s32 ggpo_idle_timeout = MAX(0, next - now - 1);
+    INFO_LOG(BRAWLBACK, "~~~~~~~~ GGPO IDLE (%i ms) ~~~~~~~~\n", ggpo_idle_timeout);
+    GGPO::ggpo_idle(ggpo, ggpo_idle_timeout); // possibly performs a rollback ( load + resim[<- just calling advance_frame callback] )
+    INFO_LOG(BRAWLBACK, "~~~~~~~~~~~~~~~ END GGPO IDLE FUNC ~~~~~~~~~~~~~~~~~~~~~\n");
+
+    // is this necessary logic? This just timesyncs when we complete a frame in less than 16ms
+    if (now < next) {
+        INFO_LOG(BRAWLBACK, "Now/Next timesync!\n");
+        numFramesToSim = 0;
+    }
+    else {
+        next = now + (1000 / 60);
+        // just calls add_local_input and synchronize_input (which themselves don't call any callbacks or anything weird)
+        // and also changes the numFramesToSim variable
+        this->RunFrame(playerFramedata); 
+    }
+
+
+    this->read_queue.push_back(numFramesToSim);
+}
+
+
+
 // recieve data from game into emulator
 void CEXIBrawlback::DMAWrite(u32 address, u32 size)
 {
@@ -1077,15 +1370,26 @@ void CEXIBrawlback::DMAWrite(u32 address, u32 size)
     case CMD_START_MATCH:
         //INFO_LOG(BRAWLBACK, "DMAWrite: CMD_START_MATCH");
         handleStartMatch(payload);
+    case CMD_GAME_PROC_OVERRIDE: // called in mainLoopSub where gameProc would be called
+        handleGameProcOverride(payload);
+        break;
+    case CMD_GAME_PROC: // called inside gameProc
+        {
+            s32 frame = *((s32*)payload);
+            currentFrame = frame;
+            GGPOErrorCode result = GGPO::ggpo_advance_frame(ggpo);
+            INFO_LOG(BRAWLBACK, ("ggpo_advance_frame. " + GGPOErrorCodeToString(result) + "\n").c_str());
+        }
+        break;
 
     
     // just using these CMD's to track frame times lol
-    case CMD_OPEN_LOGIN:
+    case CMD_START_TIMER:
         {
             frameTime = Common::Timer::GetTimeUs();
         }
         break;
-    case CMD_LOGOUT:
+    case CMD_END_TIMER:
         {
             u32 timeDiff = Common::Timer::GetTimeUs() - frameTime;
             INFO_LOG(BRAWLBACK, "Game logic took %f ms\n", (double)(timeDiff / 1000.0));

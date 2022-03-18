@@ -4,11 +4,12 @@
 #include <vector>
 #include <memory>
 #include <deque>
-#include "Core/Brawlback/Savestate.h"
 #include "Core/Brawlback/BrawlbackUtility.h"
 #include "Core/Brawlback/Netplay/Netplay.h"
 #include "Core/Brawlback/Netplay/Matchmaking.h"
 #include "Core/Brawlback/TimeSync.h"
+#include "Core/Brawlback/ggpo/ggpo_main.h"
+
 
 using namespace Brawlback;
 
@@ -24,6 +25,14 @@ public:
     void DMARead(u32 address, u32 size) override;
 
     bool IsPresent() const;
+    
+    static SavestateMap* getActiveSavestates();
+    static SavestateQueue* getAvailableSavestates();
+    static s32 getCurrentFrame();
+
+    static SavestateMap activeSavestates;
+	static SavestateQueue availableSavestates;
+    static s32 currentFrame;
 
 private:
 
@@ -48,6 +57,7 @@ private:
     // --- Net
     void MatchmakingThreadFunc();
     void NetplayThreadFunc();
+    void connectToOpponent();
     void ProcessNetReceive(ENetEvent* event);
     void ProcessRemoteFrameData(Match::PlayerFrameData* framedata, u8 numFramedatas);
     void ProcessIndividualRemoteFrameData(Match::PlayerFrameData* framedata);
@@ -89,15 +99,14 @@ private:
     void HandleLocalInputsDuringPrediction(u32 frame, u8 playerIdx);
     // -------------------------------
 
-    void connectToOpponent();
 
 
     // --- Savestates
-    std::deque<std::unique_ptr<BrawlbackSavestate>> savestates = {};
-    std::unordered_map<u32, BrawlbackSavestate*> savestatesMap = {};
 
-    std::map<s32, std::unique_ptr<BrawlbackSavestate>> activeSavestates = {};
-	std::deque<std::unique_ptr<BrawlbackSavestate>> availableSavestates = {};
+    //std::deque<std::unique_ptr<BrawlbackSavestate>> savestates = {};
+    //std::unordered_map<u32, BrawlbackSavestate*> savestatesMap = {};
+
+    
     // -------------------------------
     
 
@@ -117,6 +126,12 @@ private:
     std::array<std::unordered_map<u32, Match::PlayerFrameData*>, MAX_NUM_PLAYERS> remotePlayerFrameDataMap = {};
     // -------------------------------
 
+
+    // --- GGPO
+
+    void handleGameProcOverride(u8* payload);
+    void RunFrame(Match::PlayerFrameData* localInputs);
+    // -------------------------------
 
 
     protected:

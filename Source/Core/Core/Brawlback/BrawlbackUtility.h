@@ -8,6 +8,7 @@
 #include "Common/CommonTypes.h"
 #include "Common/Timer.h"
 #include "Core/Brawlback/Brawltypes.h"
+#include "Core/Brawlback/Savestate.h"
 
 #include "Common/Logging/Log.h"
 #include "Common/Logging/LogManager.h"
@@ -37,7 +38,7 @@
 
 // GGPO
 #define GGPO_LOG_ENABLE true
-#define GGPO_LOG_TIMESTAMPS true
+#define GGPO_LOG_TIMESTAMPS false
 #define GGPO_OOP_PERCENT 0
 // ------------
 
@@ -86,16 +87,12 @@ namespace Brawlback {
       CMD_TIMESYNC = 16,
       CMD_ROLLBACK = 17,
 
-      CMD_GET_MATCH_STATE = 4,
-      CMD_SET_MATCH_SELECTIONS = 6,
+      CMD_START_TIMER = 7,
+      CMD_END_TIMER = 8,
 
-      CMD_OPEN_LOGIN = 7,
-      CMD_LOGOUT = 8,
-      CMD_UPDATE = 9,
-      
-      CMD_GET_ONLINE_STATUS = 10,
-      CMD_CLEANUP_CONNECTION = 11,
-      CMD_GET_NEW_SEED = 12,
+      CMD_GAME_PROC_OVERRIDE = 9,
+      CMD_GAME_PROC = 10,
+
     };
 
     enum NetPacketCommand : u8 
@@ -246,6 +243,8 @@ namespace Brawlback {
     }
     
     typedef std::deque<std::unique_ptr<Match::PlayerFrameData>> PlayerFrameDataQueue;
+    typedef std::map<s32, std::unique_ptr<BrawlbackSavestate>> SavestateMap;
+    typedef std::deque<std::unique_ptr<BrawlbackSavestate>> SavestateQueue;
 
     Match::PlayerFrameData* findInPlayerFrameDataQueue(const PlayerFrameDataQueue& queue, u32 frame);
 

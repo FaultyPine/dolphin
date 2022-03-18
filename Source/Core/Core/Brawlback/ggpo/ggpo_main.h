@@ -5,37 +5,23 @@
  * in the LICENSE file.
  */
 
+#ifndef GGPO_MAIN_H
+#define GGPO_MAIN_H
+
 #include "types.h"
 #include "backends/p2p.h"
 #include "backends/synctest.h"
 #include "backends/spectator.h"
 #include "../include/ggponet.h"
 
-/*
-BOOL WINAPI
-DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved)
-{
-   srand(Platform::GetCurrentTimeMS() + Platform::GetProcessID());
-   return TRUE;
-}
-*/
+
+namespace GGPO {
 
 void
-ggpo_log(GGPOSession *ggpo, const char *fmt, ...)
-{
-   va_list args;
-   va_start(args, fmt);
-   ggpo_logv(ggpo, fmt, args);
-   va_end(args);
-}
+ggpo_log(GGPOSession *ggpo, const char *fmt, ...);
 
 void
-ggpo_logv(GGPOSession *ggpo, const char *fmt, va_list args)
-{
-   if (ggpo) {
-      ggpo->Logv(fmt, args);
-   }
-}
+ggpo_logv(GGPOSession *ggpo, const char *fmt, va_list args);
 
 GGPOErrorCode
 ggpo_start_session(GGPOSession **session,
@@ -43,26 +29,12 @@ ggpo_start_session(GGPOSession **session,
                    const char *game,
                    int num_players,
                    int input_size,
-                   unsigned short localport)
-{
-   *session= (GGPOSession *)new Peer2PeerBackend(cb,
-                                                 game,
-                                                 localport,
-                                                 num_players,
-                                                 input_size);
-   return GGPO_OK;
-}
+                   unsigned short localport);
 
 GGPOErrorCode
 ggpo_add_player(GGPOSession *ggpo,
                 GGPOPlayer *player,
-                GGPOPlayerHandle *handle)
-{
-   if (!ggpo) {
-      return GGPO_ERRORCODE_INVALID_SESSION;
-   }
-   return ggpo->AddPlayer(player, handle);
-}
+                GGPOPlayerHandle *handle);
 
 
 
@@ -72,122 +44,51 @@ ggpo_start_synctest(GGPOSession **ggpo,
                     char *game,
                     int num_players,
                     int input_size,
-                    int frames)
-{
-   *ggpo = (GGPOSession *)new SyncTestBackend(cb, game, frames, num_players);
-   return GGPO_OK;
-}
+                    int frames);
 
 GGPOErrorCode
 ggpo_set_frame_delay(GGPOSession *ggpo,
                      GGPOPlayerHandle player,
-                     int frame_delay)
-{
-   if (!ggpo) {
-      return GGPO_ERRORCODE_INVALID_SESSION;
-   }
-   return ggpo->SetFrameDelay(player, frame_delay);
-}
+                     int frame_delay);
 
 GGPOErrorCode
-ggpo_idle(GGPOSession *ggpo, int timeout)
-{
-   if (!ggpo) {
-      return GGPO_ERRORCODE_INVALID_SESSION;
-   }
-   return ggpo->DoPoll(timeout);
-}
+ggpo_idle(GGPOSession *ggpo, int timeout);
 
 GGPOErrorCode
 ggpo_add_local_input(GGPOSession *ggpo,
                      GGPOPlayerHandle player,
                      void *values,
-                     int size)
-{
-   if (!ggpo) {
-      return GGPO_ERRORCODE_INVALID_SESSION;
-   }
-   return ggpo->AddLocalInput(player, values, size);
-}
+                     int size);
 
 GGPOErrorCode
 ggpo_synchronize_input(GGPOSession *ggpo,
                        void *values,
                        int size,
-                       int *disconnect_flags)
-{
-   if (!ggpo) {
-      return GGPO_ERRORCODE_INVALID_SESSION;
-   }
-   return ggpo->SyncInput(values, size, disconnect_flags);
-}
+                       int *disconnect_flags);
 
 GGPOErrorCode ggpo_disconnect_player(GGPOSession *ggpo,
-                                     GGPOPlayerHandle player)
-{
-   if (!ggpo) {
-      return GGPO_ERRORCODE_INVALID_SESSION;
-   }
-   return ggpo->DisconnectPlayer(player);
-}
+                                     GGPOPlayerHandle player);
 
 GGPOErrorCode
-ggpo_advance_frame(GGPOSession *ggpo)
-{
-   if (!ggpo) {
-      return GGPO_ERRORCODE_INVALID_SESSION;
-   }
-   return ggpo->IncrementFrame();
-}
+ggpo_advance_frame(GGPOSession *ggpo);
 
 GGPOErrorCode
-ggpo_client_chat(GGPOSession *ggpo, char *text)
-{
-   if (!ggpo) {
-      return GGPO_ERRORCODE_INVALID_SESSION;
-   }
-   return ggpo->Chat(text);
-}
+ggpo_client_chat(GGPOSession *ggpo, char *text);
 
 GGPOErrorCode
 ggpo_get_network_stats(GGPOSession *ggpo,
                        GGPOPlayerHandle player,
-                       GGPONetworkStats *stats)
-{
-   if (!ggpo) {
-      return GGPO_ERRORCODE_INVALID_SESSION;
-   }
-   return ggpo->GetNetworkStats(stats, player);
-}
+                       GGPONetworkStats *stats);
 
 
 GGPOErrorCode
-ggpo_close_session(GGPOSession *ggpo)
-{
-   if (!ggpo) {
-      return GGPO_ERRORCODE_INVALID_SESSION;
-   }
-   delete ggpo;
-   return GGPO_OK;
-}
+ggpo_close_session(GGPOSession *ggpo);
 
 GGPOErrorCode
-ggpo_set_disconnect_timeout(GGPOSession *ggpo, int timeout)
-{
-   if (!ggpo) {
-      return GGPO_ERRORCODE_INVALID_SESSION;
-   }
-   return ggpo->SetDisconnectTimeout(timeout);
-}
+ggpo_set_disconnect_timeout(GGPOSession *ggpo, int timeout);
 
 GGPOErrorCode
-ggpo_set_disconnect_notify_start(GGPOSession *ggpo, int timeout)
-{
-   if (!ggpo) {
-      return GGPO_ERRORCODE_INVALID_SESSION;
-   }
-   return ggpo->SetDisconnectNotifyStart(timeout);
-}
+ggpo_set_disconnect_notify_start(GGPOSession *ggpo, int timeout);
 
 GGPOErrorCode ggpo_start_spectating(GGPOSession **session,
                                     GGPOSessionCallbacks *cb,
@@ -196,15 +97,10 @@ GGPOErrorCode ggpo_start_spectating(GGPOSession **session,
                                     int input_size,
                                     unsigned short local_port,
                                     char *host_ip,
-                                    unsigned short host_port)
-{
-   *session= (GGPOSession *)new SpectatorBackend(cb,
-                                                 game,
-                                                 local_port,
-                                                 num_players,
-                                                 input_size,
-                                                 host_ip,
-                                                 host_port);
-   return GGPO_OK;
-}
+                                    unsigned short host_port);
 
+
+} // namespace GGPO
+
+
+#endif
