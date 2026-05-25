@@ -52,4 +52,11 @@ extern const Info<std::string> NETPLAY_NETWORK_MODE;
 extern const Info<bool> NETPLAY_GOLF_MODE_OVERLAY;
 extern const Info<bool> NETPLAY_HIDE_REMOTE_GBAS;
 
+// Brawlback matchmaking
+extern const Info<std::string> BRAWLBACK_MM_SERVER_URL;
+extern const Info<bool> BRAWLBACK_FORCE_PORT;
+extern const Info<u16> BRAWLBACK_NETPLAY_PORT;
+extern const Info<bool> BRAWLBACK_FORCE_LAN_IP;
+extern const Info<std::string> BRAWLBACK_LAN_IP;
+
 }  // namespace Config

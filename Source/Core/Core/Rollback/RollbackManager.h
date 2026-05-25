@@ -16,18 +16,6 @@
 // Set to 1 to enable full-RAM shadow snapshots for rollback validation
 #define ROLLBACK_VALIDATE 0
 
-// BOOKMARK: optimize!
-// Both: proper multithreading and NT wide stores
-// Loading:
-//  crunch down all the deltas to remove "duplicates" - i.e. if frame 0 and frame 1 both touched
-//      page X, only the oldest delta (frame 0) needs to be applied to restore the target frame;
-//      applying frame 1's delta would just write the same data back into page X and waste time.
-//  overlap the applydeltas work with gappagerestore work
-// RestoreNonDeltaState can also probably be overlapped with the above memcpy work?
-// Saving:
-//  fan-out memcpy (parallelize DeltaSaveSlot::Save), use nt wide stores
-//  use threadpool for the async eviction job, instead of launching a new thread every time
-
 namespace Core
 {
 class System;

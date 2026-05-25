@@ -212,6 +212,8 @@ add_library(core
   HW/EXI/EXI_DeviceEthernet.h
   HW/EXI/EXI_DeviceGecko.cpp
   HW/EXI/EXI_DeviceGecko.h
+  HW/EXI/EXIBrawlback.cpp
+  HW/EXI/EXIBrawlback.h
   HW/EXI/EXI_DeviceIPL.cpp
   HW/EXI/EXI_DeviceIPL.h
   HW/EXI/EXI_DeviceMemoryCard.cpp
@@ -571,6 +573,20 @@ add_library(core
   PowerPC/SignatureDB/MEGASignatureDB.h
   PowerPC/SignatureDB/SignatureDB.cpp
   PowerPC/SignatureDB/SignatureDB.h
+  Brawlback/BrawlbackUtility.cpp
+  Brawlback/BrawlbackUtility.h
+  Brawlback/Brawltypes.h
+  Brawlback/MemRegions.h
+  Brawlback/Netplay/Matchmaking.cpp
+  Brawlback/Netplay/Matchmaking.h
+  Brawlback/Netplay/Netplay.cpp
+  Brawlback/Netplay/Netplay.h
+  Brawlback/Savestate.cpp
+  Brawlback/Savestate.h
+  Brawlback/SlippiUtility.cpp
+  Brawlback/SlippiUtility.h
+  Brawlback/TimeSync.cpp
+  Brawlback/TimeSync.h
   Rollback/DeltaSaveSlot.cpp
   Rollback/DeltaSaveSlot.h
   Rollback/FullMemcpySaveSlot.cpp

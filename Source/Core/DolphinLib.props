@@ -278,6 +278,14 @@
     <ClInclude Include="Core\FifoPlayer\FifoPlayer.h" />
     <ClInclude Include="Core\FifoPlayer\FifoRecorder.h" />
     <ClInclude Include="Core\FreeLookManager.h" />
+    <ClInclude Include="Core\Brawlback\BrawlbackUtility.h" />
+    <ClInclude Include="Core\Brawlback\Brawltypes.h" />
+    <ClInclude Include="Core\Brawlback\MemRegions.h" />
+    <ClInclude Include="Core\Brawlback\Netplay\Matchmaking.h" />
+    <ClInclude Include="Core\Brawlback\Netplay\Netplay.h" />
+    <ClInclude Include="Core\Brawlback\Savestate.h" />
+    <ClInclude Include="Core\Brawlback\SlippiUtility.h" />
+    <ClInclude Include="Core\Brawlback\TimeSync.h" />
     <ClInclude Include="Core\Rollback\DeltaSaveSlot.h" />
     <ClInclude Include="Core\Rollback\FullMemcpySaveSlot.h" />
     <ClInclude Include="Core\Rollback\IRollbackSaveSlot.h" />
@@ -326,6 +334,7 @@
     <ClInclude Include="Core\HW\EXI\EXI_DeviceBaseboard.h" />
     <ClInclude Include="Core\HW\EXI\EXI_DeviceDummy.h" />
     <ClInclude Include="Core\HW\EXI\EXI_DeviceEthernet.h" />
+    <ClInclude Include="Core\HW\EXI\EXIBrawlback.h" />
     <ClInclude Include="Core\HW\EXI\EXI_DeviceGecko.h" />
     <ClInclude Include="Core\HW\EXI\EXI_DeviceIPL.h" />
     <ClInclude Include="Core\HW\EXI\EXI_DeviceMemoryCard.h" />
@@ -992,6 +1001,12 @@
     <ClCompile Include="Core\FifoPlayer\FifoPlayer.cpp" />
     <ClCompile Include="Core\FifoPlayer\FifoRecorder.cpp" />
     <ClCompile Include="Core\FreeLookManager.cpp" />
+    <ClCompile Include="Core\Brawlback\BrawlbackUtility.cpp" />
+    <ClCompile Include="Core\Brawlback\Netplay\Matchmaking.cpp" />
+    <ClCompile Include="Core\Brawlback\Netplay\Netplay.cpp" />
+    <ClCompile Include="Core\Brawlback\Savestate.cpp" />
+    <ClCompile Include="Core\Brawlback\SlippiUtility.cpp" />
+    <ClCompile Include="Core\Brawlback\TimeSync.cpp" />
     <ClCompile Include="Core\Rollback\DeltaSaveSlot.cpp" />
     <ClCompile Include="Core\Rollback\FullMemcpySaveSlot.cpp" />
     <ClCompile Include="Core\Rollback\Perf.cpp" />
@@ -1041,6 +1056,7 @@
     <ClCompile Include="Core\HW\EXI\EXI_DeviceBaseboard.cpp" />
     <ClCompile Include="Core\HW\EXI\EXI_DeviceDummy.cpp" />
     <ClCompile Include="Core\HW\EXI\EXI_DeviceEthernet.cpp" />
+    <ClCompile Include="Core\HW\EXI\EXIBrawlback.cpp" />
     <ClCompile Include="Core\HW\EXI\EXI_DeviceGecko.cpp" />
     <ClCompile Include="Core\HW\EXI\EXI_DeviceIPL.cpp" />
     <ClCompile Include="Core\HW\EXI\EXI_DeviceMemoryCard.cpp" />

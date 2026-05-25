@@ -143,6 +143,13 @@ void GameCubePane::CreateWidgets()
     m_slot_combos[ExpansionInterface::Slot::B]->addItem(name, value);
   }
 
+  // Brawlback communicates on Slot B (channel 1, device 0) — only add it there.
+  {
+    const QString name = tr(fmt::format("{:n}", EXIDeviceType::Brawlback).c_str());
+    const int value = static_cast<int>(EXIDeviceType::Brawlback);
+    m_slot_combos[ExpansionInterface::Slot::B]->addItem(name, value);
+  }
+
   // Add SP1 devices
   for (const auto device : {
            EXIDeviceType::None,

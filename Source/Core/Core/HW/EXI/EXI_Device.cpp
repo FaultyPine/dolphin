@@ -15,6 +15,7 @@
 #include "Core/HW/EXI/EXI_DeviceIPL.h"
 #include "Core/HW/EXI/EXI_DeviceMemoryCard.h"
 #include "Core/HW/EXI/EXI_DeviceModem.h"
+#include "Core/HW/EXI/EXIBrawlback.h"
 #include "Core/HW/Memmap.h"
 #include "Core/System.h"
 
@@ -175,6 +176,10 @@ std::unique_ptr<IEXIDevice> EXIDevice_Create(Core::System& system, const EXIDevi
 
   case EXIDeviceType::AGP:
     result = std::make_unique<CEXIAgp>(system, slot);
+    break;
+
+  case EXIDeviceType::Brawlback:
+    result = std::make_unique<CEXIBrawlback>(system);
     break;
 
   case EXIDeviceType::Baseboard:

@@ -56,4 +56,11 @@ const Info<std::string> NETPLAY_NETWORK_MODE{{System::Main, "NetPlay", "NetworkM
 const Info<bool> NETPLAY_GOLF_MODE_OVERLAY{{System::Main, "NetPlay", "GolfModeOverlay"}, true};
 const Info<bool> NETPLAY_HIDE_REMOTE_GBAS{{System::Main, "NetPlay", "HideRemoteGBAs"}, false};
 
+// Brawlback matchmaking
+const Info<std::string> BRAWLBACK_MM_SERVER_URL{{System::Main, "Brawlback", "MMServerURL"}, ""};
+const Info<bool> BRAWLBACK_FORCE_PORT{{System::Main, "Brawlback", "ForcePort"}, false};
+const Info<u16> BRAWLBACK_NETPLAY_PORT{{System::Main, "Brawlback", "NetplayPort"}, 0};
+const Info<bool> BRAWLBACK_FORCE_LAN_IP{{System::Main, "Brawlback", "ForceLanIP"}, false};
+const Info<std::string> BRAWLBACK_LAN_IP{{System::Main, "Brawlback", "LanIP"}, ""};
+
 }  // namespace Config
