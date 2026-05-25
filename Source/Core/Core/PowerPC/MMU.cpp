@@ -55,9 +55,7 @@
 #include "Core/PowerPC/PowerPC.h"
 #include "Core/System.h"
 
-#ifdef _WIN32
 #include "Core/Rollback/RollbackManager.h"
-#endif
 
 #include "VideoCommon/EFBInterface.h"
 
@@ -701,9 +699,7 @@ void MMU::Write(const Common::MakeAtLeastU32<T> var, const u32 address)
 {
   Memcheck(address, var, true, sizeof(T));
   WriteToHardware<XCheckTLBFlag::Write>(address, var, sizeof(T));
-#ifdef _WIN32
   m_memory.MarkRangeDirty(address, sizeof(T));  // Track MMU slow-path writes (interpreter, backpatch).
-#endif
 }
 template void MMU::Write<u8>(const u32 var, const u32 address);
 template void MMU::Write<u16>(const u32 var, const u32 address);
@@ -714,9 +710,7 @@ void MMU::Write<u64>(const u64 var, const u32 address)
   Memcheck(address, var, true, 8);
   WriteToHardware<XCheckTLBFlag::Write>(address, static_cast<u32>(var >> 32), 4);
   WriteToHardware<XCheckTLBFlag::Write>(address + sizeof(u32), static_cast<u32>(var), 4);
-#ifdef _WIN32
   m_memory.MarkRangeDirty(address, 8);
-#endif
 }
 
 void MMU::Write_U16_Swap(const u32 var, const u32 address)
@@ -2037,9 +2031,7 @@ void MMU::DBATUpdated()
     if (!m_page_table.empty())
       ReloadPageTable();
 
-#ifdef _WIN32
     Rollback::RollbackManager::Get().NotifyDBATMappingsWereUpdated();
-#endif
   }
 #endif
 

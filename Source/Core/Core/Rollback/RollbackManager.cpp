@@ -1,8 +1,6 @@
 // Copyright 2024 Dolphin Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-#ifdef _WIN32
-
 #include "Core/Rollback/RollbackManager.h"
 
 #include <algorithm>
@@ -422,5 +420,3 @@ void RollbackManager::LoadFrame(Core::System& system, int frames_back)
 }
 
 }  // namespace Rollback
-
-#endif  // _WIN32

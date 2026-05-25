@@ -3,8 +3,6 @@
 
 #pragma once
 
-#ifdef _WIN32
-
 namespace Core
 {
 class System;
@@ -25,5 +23,3 @@ public:
 };
 
 }  // namespace Rollback
-
-#endif  // _WIN32

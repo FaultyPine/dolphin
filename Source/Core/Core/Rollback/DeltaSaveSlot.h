@@ -1,8 +1,6 @@
 
 #pragma once
 
-#ifdef _WIN32
-
 #include <bitset>
 #include <cstddef>
 #include <cstdint>
@@ -99,5 +97,3 @@ private:
 };
 
 }  // namespace Rollback
-
-#endif  // _WIN32

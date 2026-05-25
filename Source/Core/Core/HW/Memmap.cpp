@@ -42,9 +42,7 @@
 #include "VideoCommon/CommandProcessor.h"
 #include "VideoCommon/PixelEngine.h"
 
-#ifdef _WIN32
 #include "Core/Rollback/RollbackManager.h"
-#endif
 
 namespace Memory
 {
@@ -534,13 +532,9 @@ void MemoryManager::DoState(PointerWrap& p)
     return;
   }
 
-#ifdef _WIN32
   // Skip full RAM serialization during rollback (our dirty page tracking handles it)
   const bool skip_ram =
       Rollback::RollbackManager::Get().m_skip_ram_in_dostate.load(std::memory_order_seq_cst);
-#else
-  const bool skip_ram = false;
-#endif
 
   if (!skip_ram)
   {
@@ -662,7 +656,6 @@ void MemoryManager::CopyFromEmu(void* data, u32 address, size_t size) const
 
 void MemoryManager::MarkRangeDirty(u32 address, size_t size)
 {
-#ifdef _WIN32
   if (size == 0)
     return;
 
@@ -680,7 +673,6 @@ void MemoryManager::MarkRangeDirty(u32 address, size_t size)
     }
     bitmap.entries[p] = 1;
   }
-#endif
 }
 
 void MemoryManager::CopyToEmu(u32 address, const void* data, size_t size)

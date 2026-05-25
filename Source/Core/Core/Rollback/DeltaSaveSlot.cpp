@@ -1,6 +1,4 @@
 
-#ifdef _WIN32
-
 #include "Core/Rollback/DeltaSaveSlot.h"
 
 #include <cassert>
@@ -158,5 +156,3 @@ void DeltaSaveSlot::ApplyDeltaReverse() const
 }
 
 }  // namespace Rollback
-
-#endif  // _WIN32

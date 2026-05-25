@@ -1,8 +1,6 @@
 // Copyright 2024 Dolphin Emulator Project
 // SPDX-License-Identifier: GPL-2.0-or-later
 
-#ifdef _WIN32
-
 #include "Core/Rollback/Perf.h"
 
 namespace Rollback
@@ -24,5 +22,3 @@ void PerfInit()
 }
 
 }  // namespace Rollback
-
-#endif  // _WIN32

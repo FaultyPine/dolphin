@@ -19,9 +19,7 @@
 #include "Core/PowerPC/PowerPC.h"
 #include "Core/System.h"
 
-#ifdef _WIN32
 #include "Core/Rollback/RollbackManager.h"
-#endif
 
 #ifdef _M_X86_64
 #include "Core/PowerPC/Jit64/Jit.h"
@@ -47,11 +45,9 @@ void JitInterface::DoState(PointerWrap& p)
   if (!m_jit || !p.IsReadMode())
     return;
 
-#ifdef _WIN32
   // Skip the cache clear during rollback - we can assume jit is still valid
   if (Rollback::RollbackManager::Get().m_skip_jit_clear_in_dostate.load(std::memory_order_relaxed))
     return;
-#endif
 
   m_jit->ClearCache();
 }
@@ -249,11 +245,9 @@ void JitInterface::ClearCache(const Core::CPUThreadGuard&)
 
 void JitInterface::ClearSafe()
 {
-#ifdef _WIN32
   // BAT mappings are unchanged during rollback, so cached blocks remain valid.
   if (Rollback::RollbackManager::Get().m_skip_jit_clear_in_dostate.load(std::memory_order_relaxed))
     return;
-#endif
   if (m_jit)
     m_jit->GetBlockCache()->Clear();
 }

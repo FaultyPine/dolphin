@@ -3,8 +3,6 @@
 
 #pragma once
 
-#ifdef _WIN32
-
 #include <atomic>
 #include <cstdint>
 #include <future>
@@ -100,5 +98,3 @@ private:
 };
 
 }  // namespace Rollback
-
-#endif  // _WIN32
