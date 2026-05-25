@@ -5,7 +5,6 @@
 #include <vector>
 #include <memory>
 #include <deque>
-#include "Core/Brawlback/Savestate.h"
 #include "Core/Brawlback/BrawlbackUtility.h"
 #include "Core/Brawlback/Netplay/Netplay.h"
 #include "Core/Brawlback/Netplay/Matchmaking.h"
@@ -99,11 +98,10 @@ private:
 
 
     // --- Savestates
-    std::deque<std::unique_ptr<BrawlbackSavestate>> savestates = {};
-    std::unordered_map<u32, BrawlbackSavestate*> savestatesMap = {};
-
-    std::map<s32, std::unique_ptr<BrawlbackSavestate>> activeSavestates = {};
-	std::deque<std::unique_ptr<BrawlbackSavestate>> availableSavestates = {};
+    // The RollbackManager delta ring-buffer handles save/load.
+    // We only track which game frame was most recently captured so we can
+    // compute `frames_back` when the game requests a rollback load.
+    int m_lastCapturedFrame = -1;
     // -------------------------------
     
 

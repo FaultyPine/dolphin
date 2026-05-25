@@ -4,6 +4,7 @@
 #include "Core/ConfigManager.h"
 
 #include "Core/HW/Memmap.h"
+#include "Core/Rollback/RollbackManager.h"
 #include <chrono>
 #include <iostream>
 #include "VideoCommon/OnScreenDisplay.h"
@@ -88,128 +89,64 @@ CEXIBrawlback::~CEXIBrawlback()
 
 void CEXIBrawlback::handleCaptureSavestate(u8* data)
 {
-
     u64 startTime = Common::Timer::NowUs();
 
     int idx = 0;
     s32 frame = (s32)SlippiUtility::Mem::readWord(data, idx, 999, 0);
-    
-    if (frame % 30 == 0) {
-        static int dump_num = 0;
-        //INFO_LOG(BRAWLBACK, "Dumping mem\n");
-        //Dump::DoMemDumpIteration(dump_num);
+
+    auto& rbMgr = Rollback::RollbackManager::Get();
+
+    if (frame == GAME_START_FRAME)
+    {
+        // Re-init the ring buffer at game start so stale slots from any previous
+        // session never leak into this game's rollback window.
+        rbMgr.Init(m_system);
+        m_lastCapturedFrame = -1;
+        INFO_LOG_FMT(BRAWLBACK, "RollbackManager re-initialized for new game\n");
     }
 
-    // tmp
-    if (frame == GAME_START_FRAME && availableSavestates.empty()) {
-        activeSavestates.clear();
-        availableSavestates.clear();
-        for (int i = 0; i <= MAX_ROLLBACK_FRAMES; i++) {
-			availableSavestates.push_back(std::make_unique<BrawlbackSavestate>(m_system));
-		}
-        INFO_LOG_FMT(BRAWLBACK, "Initialized savestates!\n");
-    }
+    rbMgr.SaveFrame(m_system);
+    m_lastCapturedFrame = (int)frame;
 
-    // Grab an available savestate
-	std::unique_ptr<BrawlbackSavestate> ss;
-	if (!availableSavestates.empty())
-	{
-		ss = std::move(availableSavestates.back());
-		availableSavestates.pop_back();
-	}
-	else
-	{
-		// If there were no available savestates, use the oldest one
-		auto it = activeSavestates.begin();
-		ss = std::move(it->second);
-        //s32 frameToDrop = it->first;
-        //INFO_LOG(BRAWLBACK, "Dropping savestate for frame %i\n", frameToDrop);
-		activeSavestates.erase(it->first);
-	}
-
-	// If there is already a savestate for this frame, remove it and add it to available
-	if (!activeSavestates.empty() && activeSavestates.count(frame))
-	{
-		availableSavestates.push_back(std::move(activeSavestates[frame]));
-		activeSavestates.erase(frame);
-	}
-
-    if (!ss) {
-        ERROR_LOG_FMT(BRAWLBACK, "Invalid savestate on frame {}\n", frame);
-        PanicAlertFmtT("Invalid savestate on frame {0}\n", frame);
-        return;
-    }
-
-	ss->Capture();
-    //ss->frame = frame;
-    //ss->checksum = SavestateChecksum(ss->getBackupLocs()); // really expensive calculation
-    //INFO_LOG(BRAWLBACK, "Savestate for frame %i checksum is %i\n", ss->frame, ss->checksum);
-	activeSavestates[frame] = std::move(ss);
-
-	u32 timeDiff = (u32)(Common::Timer::NowUs() - startTime);
+    u32 timeDiff = (u32)(Common::Timer::NowUs() - startTime);
     INFO_LOG_FMT(BRAWLBACK, "Captured savestate for frame {} in: {} ms", frame, ((double)timeDiff) / 1000);
 }
 
 void CEXIBrawlback::handleLoadSavestate(u8* data)
 {
-
     Match::RollbackInfo* loadStateRollbackInfo = (Match::RollbackInfo*)data;
-    // the frame we should load state for is the frame we first began not receiving inputs
-    //u32 frame = Common::swap32(loadStateRollbackInfo->beginFrame);
+    // The frame we should restore is the one we first began not receiving inputs.
     s32 frame = (s32)SlippiUtility::Mem::readWord((u8*)&loadStateRollbackInfo->beginFrame);
 
-    //INFO_LOG(BRAWLBACK, "Attempting to load state for frame %i\n", frame);
+    auto& rbMgr = Rollback::RollbackManager::Get();
 
-    //u32* preserveArr = (u32*)loadStateRollbackInfo->preserveBlocks.data();
+    // `frames_back` = how many SaveFrame calls separate `frame` from the most-recently
+    // captured slot.  Must be in [1, MAX_ROLLBACK_FRAMES].
+    const int frames_back = m_lastCapturedFrame - (int)frame;
 
-	if (!activeSavestates.count(frame))
-	{
-		// This savestate does not exist - just disconnect and throw hands :/
-        ERROR_LOG_FMT(BRAWLBACK, "Savestate for frame {} does not exist.", frame);
+    if (!rbMgr.IsInitialized() || frames_back < 1 || frames_back > MAX_ROLLBACK_FRAMES)
+    {
+        ERROR_LOG_FMT(BRAWLBACK,
+                      "Cannot load savestate for frame {} (lastCaptured={}, frames_back={}).",
+                      frame, m_lastCapturedFrame, frames_back);
         PanicAlertFmtT("Savestate for frame {0} does not exist.", frame);
         this->isConnected = false;
-        if (this->server) {
-            for (int i = 0; i < this->server->peerCount; i++)
-            {
+        if (this->server)
+        {
+            for (size_t i = 0; i < this->server->peerCount; i++)
                 enet_peer_disconnect(&this->server->peers[i], 0);
-            }
         }
-        // in the future, exit out of the match or something here
-		return;
-	}
+        return;
+    }
 
-	u64 startTime = Common::Timer::NowUs();
+    u64 startTime = Common::Timer::NowUs();
+    rbMgr.LoadFrame(m_system, frames_back);
+    // After the load the ring is rewound; our "last captured" frame is now `frame`.
+    m_lastCapturedFrame = (int)frame;
 
-	// Fetch preservation blocks
-	std::vector<PreserveBlock> blocks = {};
-
-    /*
-	// Get preservation blocks
-	int idx = 0;
-	while (Common::swap32(preserveArr[idx]) != 0)
-	{
-		PreserveBlock p = {Common::swap32(preserveArr[idx]), Common::swap32(preserveArr[idx + 1])};
-		blocks.push_back(p);
-		idx += 2;
-	}
-    */
-
-	// Load savestate
-	activeSavestates[frame]->Load(blocks);
-
-	// Move all active savestates to available
-	for (auto it = activeSavestates.begin(); it != activeSavestates.end(); ++it)
-	{
-		availableSavestates.push_back(std::move(it->second));
-	}
-
-    // since we save state during resim frames, when we load state,
-    // we should clear all savestates out to make room for the new resimulated states
-
-	activeSavestates.clear();
-
-	u32 timeDiff = (u32)(Common::Timer::NowUs() - startTime);
-    ERROR_LOG_FMT(BRAWLBACK, "Loaded savestate for frame {} in: {} ms", frame, ((double)timeDiff) / 1000);
+    u32 timeDiff = (u32)(Common::Timer::NowUs() - startTime);
+    ERROR_LOG_FMT(BRAWLBACK, "Loaded savestate for frame {} (frames_back={}) in: {} ms",
+                  frame, frames_back, ((double)timeDiff) / 1000);
 }
 
 template <typename T>

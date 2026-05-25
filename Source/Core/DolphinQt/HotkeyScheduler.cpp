@@ -29,9 +29,7 @@
 #include "Core/State.h"
 #include "Core/System.h"
 
-#ifdef _WIN32
 #include "Core/Rollback/RollbackManager.h"
-#endif
 #include "Core/WiiUtils.h"
 
 #ifdef HAS_LIBMGBA
@@ -672,9 +670,8 @@ void HotkeyScheduler::Run()
     if (IsHotkey(HK_SAVE_STATE_FILE))
       emit StateSaveFile();
 
-#ifdef _WIN32
     // TEMP/DEBUG hotkeys for testing rollback
-    
+
     // Ctrl+F5: toggle continuous per-frame saving on/off
     if (IsHotkey(HK_ROLLBACK_SAVE_STATE))
     {
@@ -696,7 +693,6 @@ void HotkeyScheduler::Run()
         }
       });
     }
-#endif
   }
 }
 
