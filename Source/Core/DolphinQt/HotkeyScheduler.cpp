@@ -28,6 +28,10 @@
 #include "Core/IOS/IOS.h"
 #include "Core/State.h"
 #include "Core/System.h"
+
+#ifdef _WIN32
+#include "Core/Rollback/RollbackManager.h"
+#endif
 #include "Core/WiiUtils.h"
 
 #ifdef HAS_LIBMGBA
@@ -667,6 +671,32 @@ void HotkeyScheduler::Run()
 
     if (IsHotkey(HK_SAVE_STATE_FILE))
       emit StateSaveFile();
+
+#ifdef _WIN32
+    // TEMP/DEBUG hotkeys for testing rollback
+    
+    // Ctrl+F5: toggle continuous per-frame saving on/off
+    if (IsHotkey(HK_ROLLBACK_SAVE_STATE))
+    {
+      Core::RunOnCPUThread(system, [&system] {
+        auto& rm = Rollback::RollbackManager::Get();
+        if (rm.IsInitialized())
+          rm.ToggleFrameSave();
+      });
+    }
+
+    // Ctrl+F9: roll back as far as the ring buffer allows
+    if (IsHotkey(HK_ROLLBACK_LOAD_STATE))
+    {
+      Core::RunOnCPUThread(system, [&system] {
+        auto& rm = Rollback::RollbackManager::Get();
+        if (rm.IsInitialized())
+        {
+          rm.LoadFrame(system, Rollback::NUM_SAVE_SLOTS);
+        }
+      });
+    }
+#endif
   }
 }
 

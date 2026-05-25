@@ -1,5 +1,30 @@
 <?xml version="1.0" encoding="utf-8"?>
 <Project>
+  <!-- Superluminal Performance API — auto-detected, zero effect if not installed. -->
+  <PropertyGroup Condition="Exists('C:\Program Files\Superluminal\Performance\API\include\Superluminal\PerformanceAPI.h')">
+    <SuperluminalAPIPath>C:\Program Files\Superluminal\Performance\API</SuperluminalAPIPath>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(SuperluminalAPIPath)' != ''">
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(SuperluminalAPIPath)\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>HAVE_SUPERLUMINAL_PERFORMANCEAPI;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+
+  <!-- Tracy profiler — vendored at Externals\tracy, auto-detected. -->
+  <PropertyGroup Condition="Exists('$(MSBuildThisFileDirectory)..\..\Externals\tracy\tracy\Tracy.hpp')">
+    <TracyPath>$(MSBuildThisFileDirectory)..\..\Externals\tracy</TracyPath>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(TracyPath)' != ''">
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(TracyPath);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>TRACY_ENABLE;HAVE_TRACY;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemGroup Condition="'$(TracyPath)' != ''">
+    <ClCompile Include="$(TracyPath)\TracyClient.cpp" />
+  </ItemGroup>
+
   <ItemGroup Condition="'$(EnableCubeb)'!='false'">
     <ClInclude Include="AudioCommon\CubebStream.h" />
     <ClInclude Include="AudioCommon\CubebUtils.h" />
@@ -253,6 +278,11 @@
     <ClInclude Include="Core\FifoPlayer\FifoPlayer.h" />
     <ClInclude Include="Core\FifoPlayer\FifoRecorder.h" />
     <ClInclude Include="Core\FreeLookManager.h" />
+    <ClInclude Include="Core\Rollback\DeltaSaveSlot.h" />
+    <ClInclude Include="Core\Rollback\FullMemcpySaveSlot.h" />
+    <ClInclude Include="Core\Rollback\IRollbackSaveSlot.h" />
+    <ClInclude Include="Core\Rollback\Perf.h" />
+    <ClInclude Include="Core\Rollback\RollbackManager.h" />
     <ClInclude Include="Core\GeckoCode.h" />
     <ClInclude Include="Core\GeckoCodeConfig.h" />
     <ClInclude Include="Core\HLE\HLE_Misc.h" />
@@ -962,6 +992,10 @@
     <ClCompile Include="Core\FifoPlayer\FifoPlayer.cpp" />
     <ClCompile Include="Core\FifoPlayer\FifoRecorder.cpp" />
     <ClCompile Include="Core\FreeLookManager.cpp" />
+    <ClCompile Include="Core\Rollback\DeltaSaveSlot.cpp" />
+    <ClCompile Include="Core\Rollback\FullMemcpySaveSlot.cpp" />
+    <ClCompile Include="Core\Rollback\Perf.cpp" />
+    <ClCompile Include="Core\Rollback\RollbackManager.cpp" />
     <ClCompile Include="Core\GeckoCode.cpp" />
     <ClCompile Include="Core\GeckoCodeConfig.cpp" />
     <ClCompile Include="Core\HLE\HLE_Misc.cpp" />

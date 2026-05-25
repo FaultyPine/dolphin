@@ -42,6 +42,10 @@
 #include "VideoCommon/CommandProcessor.h"
 #include "VideoCommon/PixelEngine.h"
 
+#ifdef _WIN32
+#include "Core/Rollback/RollbackManager.h"
+#endif
+
 namespace Memory
 {
 MemoryManager::MemoryManager(Core::System& system)
@@ -530,13 +534,24 @@ void MemoryManager::DoState(PointerWrap& p)
     return;
   }
 
-  p.DoArray(m_ram, current_ram_size);
-  p.DoArray(m_l1_cache, current_l1_cache_size);
+#ifdef _WIN32
+  // Skip full RAM serialization during rollback (our dirty page tracking handles it)
+  const bool skip_ram =
+      Rollback::RollbackManager::Get().m_skip_ram_in_dostate.load(std::memory_order_seq_cst);
+#else
+  const bool skip_ram = false;
+#endif
+
+  if (!skip_ram)
+  {
+    p.DoArray(m_ram, current_ram_size);
+    p.DoArray(m_l1_cache, current_l1_cache_size);
+  }
   p.DoMarker("Memory RAM");
-  if (current_have_fake_vmem)
+  if (current_have_fake_vmem && !skip_ram)
     p.DoArray(m_fake_vmem, current_fake_vmem_size);
   p.DoMarker("Memory FakeVMEM");
-  if (current_have_exram)
+  if (current_have_exram && !skip_ram)
     p.DoArray(m_exram, current_exram_size);
   p.DoMarker("Memory EXRAM");
 }
@@ -645,6 +660,29 @@ void MemoryManager::CopyFromEmu(void* data, u32 address, size_t size) const
   memcpy(data, pointer, size);
 }
 
+void MemoryManager::MarkRangeDirty(u32 address, size_t size)
+{
+#ifdef _WIN32
+  if (size == 0)
+    return;
+
+  const uint32_t phys_addr = address & 0x1FFFFFFFu;
+
+  auto& bitmap = Rollback::JITDirtyBitmap::Get();
+  const uint32_t first_page = phys_addr >> 12;
+  const uint32_t last_page  = (phys_addr + static_cast<uint32_t>(size) - 1) >> 12;
+  for (uint32_t p = first_page; p <= last_page; ++p)
+  {
+    if (p >= static_cast<uint32_t>(Rollback::JITDirtyBitmap::ENTRY_COUNT))
+    {
+      PanicAlertFmt("Range in MarkRangeDirty exceeds bitmap capacity. Page {:x} (address {:#010x})", p, address);
+      break;
+    }
+    bitmap.entries[p] = 1;
+  }
+#endif
+}
+
 void MemoryManager::CopyToEmu(u32 address, const void* data, size_t size)
 {
   if (size == 0)
@@ -657,6 +695,7 @@ void MemoryManager::CopyToEmu(u32 address, const void* data, size_t size)
     return;
   }
   memcpy(pointer, data, size);
+  MarkRangeDirty(address, size);
 }
 
 void MemoryManager::Memset(u32 address, u8 value, size_t size)
@@ -671,6 +710,7 @@ void MemoryManager::Memset(u32 address, u8 value, size_t size)
     return;
   }
   memset(pointer, value, size);
+  MarkRangeDirty(address, size);
 }
 
 std::string MemoryManager::GetString(u32 em_address, size_t size)

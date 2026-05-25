@@ -635,6 +635,7 @@ void AXWiiUCode::OutputWMSamples(u32* addresses)
       s16 sample = ClampS16(in[j]);
       out[j] = Common::swap16((u16)sample);
     }
+    memory.MarkRangeDirty(addresses[i], 3 * 6 * sizeof(s16));
   }
 }
 

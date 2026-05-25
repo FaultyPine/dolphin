@@ -98,6 +98,7 @@ private:
   void OnTableContextMenu(const QPoint& pos);
   void OnTableHeaderContextMenu(const QPoint& pos);
   void OnTableMenuViewCode();
+  void OnTableMenuCopyData();
   void OnTableMenuEraseBlocks();
   void OnStatusBarPressed();
 

@@ -8,6 +8,8 @@
 #include <ranges>
 #include <utility>
 
+#include <QApplication>
+#include <QClipboard>
 #include <QHBoxLayout>
 #include <QHeaderView>
 #include <QLineEdit>
@@ -439,6 +441,52 @@ void JITWidget::OnTableMenuEraseBlocks()
   // Because currentChanged has been emitted, OnTableCurrentChanged has already handled the rest.
 }
 
+void JITWidget::OnTableMenuCopyData()
+{
+  const auto* const selection_model = m_table_view->selectionModel();
+  const QModelIndexList selected_rows = selection_model->selectedRows();
+
+  if (selected_rows.isEmpty())
+    return;
+
+  QString table_text;
+
+  static constexpr std::array<const char*, Column::NumberOfColumns> headers = {
+      QT_TR_NOOP("Flags"),      QT_TR_NOOP("Eff Addr"),     QT_TR_NOOP("Code"),
+      QT_TR_NOOP("Repeat"),     QT_TR_NOOP("Host Near"),     QT_TR_NOOP("Host Far"),
+      QT_TR_NOOP("RunCount"),   QT_TR_NOOP("Cycles"),        QT_TR_NOOP("Cyc Avg"),
+      QT_TR_NOOP("Cyc %"),      QT_TR_NOOP("Time(ns)"),      QT_TR_NOOP("Time Avg(ns)"),
+      QT_TR_NOOP("Time %"),     QT_TR_NOOP("Symbol"),
+  };
+
+  for (int col = 0; col < Column::NumberOfColumns; ++col)
+  {
+    if (!m_table_view->isColumnHidden(col))
+    {
+      table_text += tr(headers[col]);
+      table_text += QStringLiteral("\t");
+    }
+  }
+  table_text += QStringLiteral("\n");
+
+  for (const QModelIndex& row : selected_rows)
+  {
+    for (int col = 0; col < Column::NumberOfColumns; ++col)
+    {
+      if (!m_table_view->isColumnHidden(col))
+      {
+        const QModelIndex index = m_table_proxy->index(row.row(), col);
+        const QVariant mydata = m_table_model->data(m_table_proxy->mapToSource(index), Qt::DisplayRole);
+        table_text += mydata.toString();
+        table_text += QStringLiteral("\t");
+      }
+    }
+    table_text += QStringLiteral("\n");
+  }
+
+  QApplication::clipboard()->setText(table_text);
+}
+
 void JITWidget::OnStatusBarPressed()
 {
   if (Core::GetState(m_system) == Core::State::Paused)
@@ -622,6 +670,7 @@ JITWidget::JITWidget(Core::System& system, QWidget* parent) : QDockWidget(parent
 
   m_table_context_menu = new QMenu(this);
   m_table_context_menu->addAction(tr("View &Code"), this, &JITWidget::OnTableMenuViewCode);
+  m_table_context_menu->addAction(tr("&Copy Data"), this, &JITWidget::OnTableMenuCopyData);
   m_table_context_menu->addAction(tr("&Erase Block(s)"), this, &JITWidget::OnTableMenuEraseBlocks);
 
   LoadQSettings();

@@ -571,6 +571,16 @@ add_library(core
   PowerPC/SignatureDB/MEGASignatureDB.h
   PowerPC/SignatureDB/SignatureDB.cpp
   PowerPC/SignatureDB/SignatureDB.h
+  Rollback/DeltaSaveSlot.cpp
+  Rollback/DeltaSaveSlot.h
+  Rollback/FullMemcpySaveSlot.cpp
+  Rollback/FullMemcpySaveSlot.h
+  Rollback/IRollbackSaveSlot.h
+  Rollback/Perf.cpp
+  Rollback/Perf.h
+  ../../../Externals/tracy/TracyClient.cpp
+  Rollback/RollbackManager.cpp
+  Rollback/RollbackManager.h
   State.cpp
   State.h
   SyncIdentifier.h

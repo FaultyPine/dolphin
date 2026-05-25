@@ -63,6 +63,9 @@ public:
   void UnsafeWriteRegToReg(Gen::X64Reg reg_value, Gen::X64Reg reg_addr, int accessSize,
                            s32 offset = 0, bool swap = true, Gen::MovInfo* info = nullptr);
 
+  // Emit dirty-page tracking for a fastmem store (must precede info->address capture).
+  void EmitJITDirtyBitmapUpdate(Gen::X64Reg reg_addr, s32 offset);
+
   bool UnsafeLoadToReg(Gen::X64Reg reg_value, Gen::OpArg opAddress, int accessSize, s32 offset,
                        bool signExtend, Gen::MovInfo* info = nullptr);
 

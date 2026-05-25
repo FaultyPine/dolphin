@@ -9,6 +9,10 @@
 
 #include <fmt/format.h>
 
+#ifdef HAVE_TRACY
+#include <tracy/Tracy.hpp>
+#endif
+
 #include "Common/CommonTypes.h"
 #include "Common/EnumMap.h"
 #include "Common/Logging/Log.h"
@@ -351,6 +355,9 @@ static void BPWritten(PixelShaderManager& pixel_shader_manager, XFStateManager& 
         // memory so they form a single completed XFB. See
         // https://dolphin-emu.org/blog/2017/11/19/hybridxfb/ for examples and more detail.
         system.GetVideoEvents().after_frame_event.Trigger(system);
+#ifdef HAVE_TRACY
+        FrameMark;
+#endif
 
         // Note: Theoretically, in the future we could track the VI configuration and try to detect
         //       when an XFB is the last XFB copy of a frame. Not only would we get a clean "end of

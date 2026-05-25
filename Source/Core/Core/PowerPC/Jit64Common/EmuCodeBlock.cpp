@@ -6,6 +6,9 @@
 #include <functional>
 
 #include "Common/Assert.h"
+#ifdef _WIN32
+#include "Core/Rollback/DeltaSaveSlot.h"
+#endif
 #include "Common/CPUDetect.h"
 #include "Common/FloatUtils.h"
 #include "Common/Intrinsics.h"
@@ -137,9 +140,60 @@ FixupBranch EmuCodeBlock::CheckIfSafeAddress(const OpArg& reg_value, X64Reg reg_
   return J_CC(CC_Z, m_far_code.Enabled() ? Jump::Near : Jump::Short);
 }
 
+#if ROLLBACK_VALIDATE
+static void FailedDirtyBitmapBoundsCheck()
+{
+  PanicAlertFmt("JIT dirty bitmap bounds check failed! This should never happen");
+}
+#endif
+
+void EmuCodeBlock::EmitJITDirtyBitmapUpdate(X64Reg reg_addr, s32 offset)
+{
+#ifdef _WIN32
+  // dirty_bitmap[(effective_addr + offset) & 0x1FFFFFFF >> 12] = 1
+
+  PUSH(RSCRATCH);   // RAX
+  PUSH(RSCRATCH2);  // RDX
+
+  if (reg_addr != RSCRATCH)
+    MOV(32, R(RSCRATCH), R(reg_addr));
+  if (offset != 0)
+    ADD(32, R(RSCRATCH), Imm32(static_cast<u32>(offset)));
+
+  AND(32, R(RSCRATCH), Imm32(0x1FFFFFFFu));
+  SHR(32, R(RSCRATCH), Imm8(12));
+
+#if ROLLBACK_VALIDATE
+  CMP(32, R(RSCRATCH), Imm32(static_cast<u32>(Rollback::JITDirtyBitmap::ENTRY_COUNT)));
+  FixupBranch bounds_ok = J_CC(CC_B, Jump::Near);
+
+  ABI_PushRegistersAndAdjustStack({}, 0);
+  ABI_CallFunction(FailedDirtyBitmapBoundsCheck);
+  ABI_PopRegistersAndAdjustStack({}, 0);
+  FixupBranch skip = J(Jump::Near);
+
+  SetJumpTarget(bounds_ok);
+#endif
+  MOV(64, R(RSCRATCH2),
+      Imm64(reinterpret_cast<u64>(Rollback::JITDirtyBitmap::Get().entries)));
+  // the actual bitmap update store
+  MOV(8, MComplex(RSCRATCH2, RSCRATCH, SCALE_1, 0), Imm8(1));
+
+#if ROLLBACK_VALIDATE
+  SetJumpTarget(skip);
+#endif
+
+  POP(RSCRATCH2);
+  POP(RSCRATCH);
+#endif
+}
+
 void EmuCodeBlock::UnsafeWriteRegToReg(OpArg reg_value, X64Reg reg_addr, int accessSize, s32 offset,
                                        bool swap, MovInfo* info)
 {
+  // runs before info->address is captured so the instrumentation sits outside the backpatch region
+  EmitJITDirtyBitmapUpdate(reg_addr, offset);
+
   if (info)
   {
     info->address = GetWritableCodePtr();

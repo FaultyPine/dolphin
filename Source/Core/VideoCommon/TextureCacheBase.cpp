@@ -17,6 +17,10 @@
 
 #include <fmt/format.h>
 
+#ifdef HAVE_TRACY
+#include <tracy/Tracy.hpp>
+#endif
+
 #include "Common/Align.h"
 #include "Common/Assert.h"
 #include "Common/ChunkFile.h"
@@ -1233,6 +1237,9 @@ private:
 
 TCacheEntry* TextureCacheBase::Load(u32 stage)
 {
+#ifdef HAVE_TRACY
+  ZoneScopedN("TextureCache::Load");
+#endif
   if (auto entry = LoadImpl(stage, false))
   {
     if (!DidLinkedAssetsChange(*entry))
@@ -2272,7 +2279,10 @@ void TextureCacheBase::CopyRenderTargetToTexture(
       if (skip == true)
       {
         if (copy_to_ram)
+        {
           UninitializeEFBMemory(dst, dstStride, bytes_per_row, num_blocks_y);
+          memory.MarkRangeDirty(dstAddr, covered_range);
+        }
         return;
       }
     }
@@ -2405,6 +2415,7 @@ void TextureCacheBase::CopyRenderTargetToTexture(
         // Immediately flush it.
         WriteEFBCopyToRAM(dst, bytes_per_row / sizeof(u32), num_blocks_y, dstStride,
                           std::move(staging_texture));
+        memory.MarkRangeDirty(dstAddr, covered_range);
       }
       else
       {
@@ -2421,10 +2432,12 @@ void TextureCacheBase::CopyRenderTargetToTexture(
     if (is_xfb_copy)
     {
       UninitializeXFBMemory(dst, dstStride, bytes_per_row, num_blocks_y);
+      memory.MarkRangeDirty(dstAddr, covered_range);
     }
     else
     {
       UninitializeEFBMemory(dst, dstStride, bytes_per_row, num_blocks_y);
+      memory.MarkRangeDirty(dstAddr, covered_range);
     }
   }
 
@@ -2550,6 +2563,7 @@ void TextureCacheBase::FlushEFBCopy(TCacheEntry* entry)
   u8* const dst = memory.GetPointerForRange(entry->addr, covered_range);
   WriteEFBCopyToRAM(dst, entry->pending_efb_copy_width, entry->pending_efb_copy_height,
                     entry->memory_stride, std::move(entry->pending_efb_copy));
+  memory.MarkRangeDirty(entry->addr, covered_range);
 
   // If the EFB copy was invalidated (e.g. the bloom case mentioned in InvalidateTexture), we don't
   // need to do anything more. The entry will be automatically deleted by smart pointers

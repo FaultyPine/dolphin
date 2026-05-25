@@ -364,3 +364,5 @@ void MMCRUpdated(PowerPCState& ppc_state);
 void RecalculateAllFeatureFlags(PowerPCState& ppc_state);
 
 }  // namespace PowerPC
+
+void PowerPC_SetSkipDCacheFlushForRollback(bool skip);

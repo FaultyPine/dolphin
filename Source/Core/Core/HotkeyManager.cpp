@@ -197,7 +197,10 @@ constexpr std::array<const char*, NUM_HOTKEYS> s_hotkey_labels{{
     _trans("4x"),
 
     _trans("Show Skylanders Portal"),
-    _trans("Show Infinity Base")
+    _trans("Show Infinity Base"),
+
+    _trans("Rollback Save State"),
+    _trans("Rollback Load State"),
 }};
 // clang-format on
 static_assert(NUM_HOTKEYS == s_hotkey_labels.size(), "Wrong count of hotkey_labels");
@@ -325,7 +328,8 @@ constexpr std::array<HotkeyGroupInfo, NUM_HOTKEY_GROUPS> s_groups_info = {
      {_trans("GBA Core"), HK_GBA_LOAD, HK_GBA_RESET, true},
      {_trans("GBA Volume"), HK_GBA_VOLUME_DOWN, HK_GBA_TOGGLE_MUTE, true},
      {_trans("GBA Window Size"), HK_GBA_1X, HK_GBA_4X, true},
-     {_trans("USB Emulation Devices"), HK_SKYLANDERS_PORTAL, HK_INFINITY_BASE}}};
+     {_trans("USB Emulation Devices"), HK_SKYLANDERS_PORTAL, HK_INFINITY_BASE},
+     {_trans("Rollback"), HK_ROLLBACK_SAVE_STATE, HK_ROLLBACK_LOAD_STATE}}};
 
 HotkeyManager::HotkeyManager()
 {
@@ -473,4 +477,7 @@ void HotkeyManager::LoadDefaults(const ControllerInterface& ciface)
 
   set_key_expression(HK_SKYLANDERS_PORTAL, hotkey_string({"Ctrl", "P"}));
   set_key_expression(HK_INFINITY_BASE, hotkey_string({"Ctrl", "I"}));
+
+  set_key_expression(HK_ROLLBACK_SAVE_STATE, hotkey_string({"Ctrl", "F5"}));
+  set_key_expression(HK_ROLLBACK_LOAD_STATE, hotkey_string({"Ctrl", "F9"}));
 }

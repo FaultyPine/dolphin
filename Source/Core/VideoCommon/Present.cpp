@@ -22,6 +22,7 @@
 #include "VideoCommon/VertexManagerBase.h"
 #include "VideoCommon/VideoConfig.h"
 #include "VideoCommon/VideoEvents.h"
+#include "VideoCommon/VideoState.h"
 #include "VideoCommon/Widescreen.h"
 
 std::unique_ptr<VideoCommon::Presenter> g_presenter;
@@ -1041,7 +1042,10 @@ void Presenter::DoState(PointerWrap& p)
   p.Do(m_last_xfb_height);
 
   // If we're loading and there is a last XFB, re-display it.
-  if (p.IsReadMode() && m_last_xfb_stride != 0)
+  // Skip the ImmediateSwap during rollback: restoring the frame buffer to the GPU takes
+  // ~2ms and causes a GPU bubble.  The correct image will be displayed naturally on the
+  // next VI frame that the emulator produces after resuming.
+  if (p.IsReadMode() && m_last_xfb_stride != 0 && !VideoCommon_GetSkipGPUReadbackForRollback())
   {
     // This technically counts as the end of the frame
     GetVideoEvents().after_frame_event.Trigger(Core::System::GetInstance());

@@ -10,6 +10,10 @@
 #include <vector>
 
 #include "Common/ChunkFile.h"
+
+#ifdef HAVE_TRACY
+#include <tracy/Tracy.hpp>
+#endif
 #include "Common/CommonTypes.h"
 #include "Common/Logging/Log.h"
 #include "Common/MsgHandler.h"
@@ -295,8 +299,14 @@ void DVDThread::FinishRead(u64 id, s64 cycles_late)
 
 void DVDThread::ProcessReadRequest(ReadRequest&& request)
 {
+#ifdef HAVE_TRACY
+  ZoneScopedN("DVDThread::Read");
+#endif
   m_file_logger.Log(*m_disc, request.partition, request.dvd_offset);
 
+#ifdef HAVE_TRACY
+  ZoneValue(static_cast<int64_t>(request.length));
+#endif
   std::vector<u8> buffer(request.length);
   if (!m_disc->Read(request.dvd_offset, request.length, buffer.data(), request.partition))
     buffer.resize(0);

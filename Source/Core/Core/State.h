@@ -7,9 +7,11 @@
 
 #include <cstddef>
 #include <functional>
+#include <span>
 #include <string>
 #include <type_traits>
 
+#include "Common/Buffer.h"
 #include "Common/CommonTypes.h"
 
 namespace Core
@@ -81,6 +83,10 @@ struct StateExtendedHeader
 
 void Init(Core::System& system);
 void Shutdown();
+
+// Low-level buffer serialization for rollback. Returns bytes written, or 0 on failure.
+std::size_t SaveToBuffer(Core::System& system, Common::UniqueBuffer<u8>& buffer);
+bool LoadFromBuffer(Core::System& system, std::span<u8> buffer);
 
 // Returns a string containing information of the savestate in the given slot
 // which can be presented to the user for identification purposes

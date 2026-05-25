@@ -30,6 +30,9 @@
 #include "Core/HW/SystemTimers.h"
 #include "Core/Movie.h"
 #include "Core/System.h"
+#ifdef _WIN32
+#include "Core/Rollback/RollbackManager.h"
+#endif
 
 #include "DiscIO/Enums.h"
 
@@ -898,6 +901,13 @@ void VideoInterfaceManager::EndField(FieldType field, u64 ticks)
   m_system.GetPerfMetrics().CountVBlank();
   m_system.GetVideoEvents().vi_end_field_event.Trigger();
   Core::OnFrameEnd(m_system);
+#ifdef _WIN32
+  {
+    auto& rm = Rollback::RollbackManager::Get();
+    if (rm.IsInitialized() && rm.m_frame_save_enabled.load(std::memory_order_relaxed))
+      rm.m_frame_save_pending.store(true, std::memory_order_relaxed);
+  }
+#endif
 }
 
 // Purpose: Send VI interrupt when triggered

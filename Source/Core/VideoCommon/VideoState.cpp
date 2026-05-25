@@ -27,6 +27,18 @@
 #include "VideoCommon/XFMemory.h"
 #include "VideoCommon/XFStateManager.h"
 
+static bool s_skip_gpu_readback_for_rollback = false;
+
+void VideoCommon_SetSkipGPUReadbackForRollback(bool skip)
+{
+  s_skip_gpu_readback_for_rollback = skip;
+}
+
+bool VideoCommon_GetSkipGPUReadbackForRollback()
+{
+  return s_skip_gpu_readback_for_rollback;
+}
+
 void VideoCommon_DoState(PointerWrap& p)
 {
   bool software = false;
@@ -88,17 +100,27 @@ void VideoCommon_DoState(PointerWrap& p)
   g_vertex_manager->DoState(p);
   p.DoMarker("VertexManager");
 
-  g_framebuffer_manager->DoState(p);
+  // Skip GPU readbacks during rollback; GPU resources rebuild from restored CPU state.
+  if (!s_skip_gpu_readback_for_rollback)
+  {
+    g_framebuffer_manager->DoState(p);
+  }
   p.DoMarker("FramebufferManager");
 
-  g_texture_cache->DoState(p);
+  if (!s_skip_gpu_readback_for_rollback)
+  {
+    g_texture_cache->DoState(p);
+  }
   p.DoMarker("TextureCache");
 
   g_presenter->DoState(p);
   g_frame_dumper->DoState(p);
   p.DoMarker("Presenter");
 
-  g_bounding_box->DoState(p);
+  if (!s_skip_gpu_readback_for_rollback)
+  {
+    g_bounding_box->DoState(p);
+  }
   p.DoMarker("Bounding Box");
 
   g_widescreen->DoState(p);

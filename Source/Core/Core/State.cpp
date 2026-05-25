@@ -219,7 +219,7 @@ static bool CheckIfStateLoadIsAllowed(Core::System& system)
   return true;
 }
 
-static bool LoadFromBuffer(Core::System& system, std::span<u8> buffer)
+bool LoadFromBuffer(Core::System& system, std::span<u8> buffer)
 {
   u8* ptr = buffer.data();
   PointerWrap p(&ptr, buffer.size(), PointerWrap::Mode::Read);
@@ -228,7 +228,7 @@ static bool LoadFromBuffer(Core::System& system, std::span<u8> buffer)
 }
 
 // Returns the required size, or 0 on failure.
-static std::size_t SaveToBuffer(Core::System& system, Common::UniqueBuffer<u8>& buffer)
+std::size_t SaveToBuffer(Core::System& system, Common::UniqueBuffer<u8>& buffer)
 {
   // Attempt to save to our provided buffer as-is.
   // If buffer isn't large enough, PointerWrap transitions to MeasureMode,

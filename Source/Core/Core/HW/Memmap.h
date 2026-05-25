@@ -126,6 +126,8 @@ public:
   void CopyFromEmu(void* data, u32 address, size_t size) const;
   void CopyToEmu(u32 address, const void* data, size_t size);
   void Memset(u32 address, u8 value, size_t size);
+  // Mark pages dirty for rollback. Call after direct writes that bypass CopyToEmu.
+  void MarkRangeDirty(u32 address, size_t size);
   u8 Read_U8(u32 address) const;
   u16 Read_U16(u32 address) const;
   u32 Read_U32(u32 address) const;
@@ -161,6 +163,8 @@ public:
 
     for (size_t i = 0; i < size / sizeof(T); i++)
       dest[i] = Common::FromBigEndian(data[i]);
+
+    MarkRangeDirty(address, size);
   }
 
 private:

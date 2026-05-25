@@ -27,6 +27,10 @@
 #include "Core/State.h"
 #include "Core/System.h"
 
+#ifdef _WIN32
+#include "Core/Rollback/RollbackManager.h"
+#endif
+
 namespace HW
 {
 void Init(Core::System& system, const Sram* override_sram)
@@ -59,10 +63,18 @@ void Init(Core::System& system, const Sram* override_sram)
   }
 
   system.GetMemory().InitMMIO(system);
+
+#ifdef _WIN32
+  Rollback::RollbackManager::Get().Init(system);
+#endif
 }
 
 void Shutdown(Core::System& system)
 {
+#ifdef _WIN32
+  Rollback::RollbackManager::Get().Shutdown();
+#endif
+
   // IOS should always be shut down regardless of IsWii because it can be running in GC mode (MIOS).
   IOS::HLE::Shutdown(system);  // Depends on Memory
   system.GetWiiIPC().Shutdown();
@@ -112,7 +124,14 @@ void DoState(Core::System& system, PointerWrap& p)
   {
     system.GetWiiIPC().DoState(p);
     p.DoMarker("IOS");
-    system.GetIOS()->DoState(p);
+
+#ifdef _WIN32
+    if (!Rollback::RollbackManager::Get().m_skip_ios_in_dostate.load(
+            std::memory_order_relaxed))
+#endif
+    {
+      system.GetIOS()->DoState(p);
+    }
     p.DoMarker("IOS::HLE");
   }
 

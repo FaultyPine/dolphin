@@ -245,6 +245,8 @@ void BluetoothEmuDevice::SendACLPacket(const bdaddr_t& source, const u8* data, u
 
     // Write the packet to the buffer
     memcpy(reinterpret_cast<u8*>(header) + sizeof(hci_acldata_hdr_t), data, header->length);
+    memory.MarkRangeDirty(m_acl_endpoint->data_address,
+                          sizeof(hci_acldata_hdr_t) + header->length);
 
     GetEmulationKernel().EnqueueIPCReply(m_acl_endpoint->ios_request,
                                          sizeof(hci_acldata_hdr_t) + size);
@@ -439,6 +441,7 @@ void BluetoothEmuDevice::ACLPool::WriteToEndpoint(const USB::V0BulkMessage& endp
 
   // Write the packet to the buffer
   std::copy_n(data, size, (u8*)header + sizeof(hci_acldata_hdr_t));
+  memory.MarkRangeDirty(endpoint.data_address, sizeof(hci_acldata_hdr_t) + size);
 
   m_queue.pop_front();
 

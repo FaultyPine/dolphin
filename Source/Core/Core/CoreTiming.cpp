@@ -32,6 +32,10 @@
 #include "VideoCommon/VideoConfig.h"
 #include "VideoCommon/VideoEvents.h"
 
+#ifdef HAVE_TRACY
+#include <tracy/Tracy.hpp>
+#endif
+
 namespace CoreTiming
 {
 static constexpr int MAX_SLICE_LENGTH = 20000;
@@ -409,6 +413,9 @@ TimePoint CoreTimingManager::GetTargetHostTime(s64 target_cycle)
 
 void CoreTimingManager::SleepUntil(TimePoint time_point)
 {
+#ifdef HAVE_TRACY
+  ZoneScopedN("CoreTiming::SleepUntil");
+#endif
   const bool use_precision_timer = m_use_precision_timer.load(std::memory_order_relaxed);
 
   if (Core::IsCPUThread())
@@ -423,6 +430,9 @@ void CoreTimingManager::SleepUntil(TimePoint time_point)
     // Count amount of time sleeping for analytics
     const TimePoint time_after_sleep = Clock::now();
     m_system.GetPerfMetrics().CountThrottleSleep(time_after_sleep - time);
+#ifdef HAVE_TRACY
+    ZoneValue(std::chrono::duration_cast<std::chrono::microseconds>(time_after_sleep - time).count());
+#endif
   }
   else
   {
@@ -435,6 +445,9 @@ void CoreTimingManager::SleepUntil(TimePoint time_point)
 
 void CoreTimingManager::Throttle(const s64 target_cycle)
 {
+#ifdef HAVE_TRACY
+  ZoneScopedN("CoreTiming::Throttle");
+#endif
   const TimePoint time = Clock::now();
 
   const bool already_throttled =

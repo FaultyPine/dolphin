@@ -6,3 +6,8 @@
 class PointerWrap;
 
 void VideoCommon_DoState(PointerWrap& p);
+
+// Skips GPU readbacks (texture cache, framebuffer, bounding box) in DoState.
+// Register state (BP/XF/FIFO) is always saved. Must match between save and load.
+void VideoCommon_SetSkipGPUReadbackForRollback(bool skip);
+bool VideoCommon_GetSkipGPUReadbackForRollback();
