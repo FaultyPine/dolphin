@@ -974,6 +974,16 @@ void CEXIBrawlback::handleFindMatch(u8* payload) {
 }
 
 
+void CEXIBrawlback::handleRegisterExcludeRegion(u8* data)
+{
+    // Payload: [virt_addr u32 BE][size_bytes u32 BE]
+    int idx = 0;
+    const u32 virt_addr  = SlippiUtility::Mem::readWord(data, idx, 999, 0);
+    const u32 size_bytes = SlippiUtility::Mem::readWord(data, idx, 999, 0);
+    INFO_LOG_FMT(BRAWLBACK, "RegisterExcludeRegion: virt={:#010x} size={:#x}", virt_addr, size_bytes);
+    Rollback::RollbackManager::Get().AddExcludeRegion(virt_addr, size_bytes);
+}
+
 void CEXIBrawlback::handleStartMatch(u8* payload) {
     //if (!payload) return;
     Match::GameSettings* settings = (Match::GameSettings*)payload;
@@ -1028,6 +1038,9 @@ void CEXIBrawlback::DMAWrite(u32 address, u32 size)
     case CMD_START_MATCH:
         //INFO_LOG(BRAWLBACK, "DMAWrite: CMD_START_MATCH");
         handleStartMatch(payload);
+        break;
+    case CMD_REGISTER_EXCLUDE_REGION:
+        handleRegisterExcludeRegion(payload);
         break;
 
     

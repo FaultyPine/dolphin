@@ -170,11 +170,32 @@ void RollbackManager::EndDoState()
   m_skip_ram_in_dostate.store(false, std::memory_order_seq_cst);
 }
 
+void RollbackManager::AddExcludeRegion(uint32_t virt_addr, uint32_t size_bytes)
+{
+  INFO_LOG_FMT(BRAWLBACK, "Added exclude region {} - {}", virt_addr, virt_addr + size_bytes);
+  m_exclude_regions.push_back(ExcludeRegion::FromVirt(virt_addr, size_bytes));
+}
+
+static const std::vector<ExcludeRegion> s_brawlback_hardcoded_exclude_regions = {
+  // Brawlback C++ framework heap (MEM2).
+  // This holds rollback control state (framesToAdvance, pastFrameDatas, etc.)
+  // that must survive across a rollback restore unchanged.
+  //ExcludeRegion::FromVirt(0x935d7660u, 0x89a0u),
+  ExcludeRegion::FromVirt(0x935d3940u, 0x0000c6c0),
+  // default gecko codes region (do we actually want to exclude this? probably not...
+  // ExcludeRegion::FromVirt(0x80001800, 0x80003000),
+
+  // bss/data sections of our cpp code framework
+  // see "infoSegmentAddress" - "memoryHeapEndAddress in settings.json in the BuildSystem
+  ExcludeRegion::FromVirt(0x935D0000, 0x10000),
+};
+
 void RollbackManager::Init(Core::System& system)
 {
   if (m_initialized)
     Shutdown();
 
+  m_exclude_regions = s_brawlback_hardcoded_exclude_regions;
   PerfInit();
 
   auto& memory = system.GetMemory();
@@ -367,7 +388,7 @@ void RollbackManager::LoadFrame(Core::System& system, int frames_back)
   for (int step = 1; step <= frames_back; ++step)
   {
     const int slot = Wrap(most_recent - step, NUM_SAVE_SLOTS);
-    m_slots[slot].ApplyDeltaReverse();
+    m_slots[slot].ApplyDeltaReverse(m_exclude_regions);
   }
 
   // Restore gap pages from base; read lock waits out any in-flight eviction
@@ -380,8 +401,13 @@ void RollbackManager::LoadFrame(Core::System& system, int frames_back)
       for (uint32_t p = 0; p < mem1_pages; ++p)
       {
         if (!target_pages.test(p))
-          std::memcpy(m_mem1_ptr + p * PAGE_SIZE,
-                      m_base_snapshot.mem1.get() + p * PAGE_SIZE, PAGE_SIZE);
+        {
+          savestateMemcpy(m_mem1_ptr + p * PAGE_SIZE,
+                          m_base_snapshot.mem1.get() + p * PAGE_SIZE,
+                          PAGE_SIZE,
+                          p * static_cast<uint32_t>(PAGE_SIZE),
+                          m_exclude_regions);
+        }
       }
       if (m_mem2_ptr && m_base_snapshot.mem2)
       {
@@ -389,8 +415,13 @@ void RollbackManager::LoadFrame(Core::System& system, int frames_back)
         for (uint32_t p = 0; p < mem2_pages; ++p)
         {
           if (!target_pages.test(DeltaSaveSlot::MEM2_FIRST_PAGE + p))
-            std::memcpy(m_mem2_ptr + p * PAGE_SIZE,
-                        m_base_snapshot.mem2.get() + p * PAGE_SIZE, PAGE_SIZE);
+          {
+            savestateMemcpy(m_mem2_ptr + p * PAGE_SIZE,
+                            m_base_snapshot.mem2.get() + p * PAGE_SIZE,
+                            PAGE_SIZE,
+                            0x10000000u + p * static_cast<uint32_t>(PAGE_SIZE),
+                            m_exclude_regions);
+          }
         }
       }
     }

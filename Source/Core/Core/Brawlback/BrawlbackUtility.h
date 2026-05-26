@@ -17,7 +17,7 @@
 #include "Savestate.h"
 
 // make sure this is the same as the one in Brawlback.h on the game side
-#define MAX_ROLLBACK_FRAMES 5
+#define MAX_ROLLBACK_FRAMES 6
 
 #define FRAME_DELAY 2
 static_assert(FRAME_DELAY >= 1);
@@ -92,6 +92,7 @@ namespace Brawlback {
       CMD_FRAMEDATA = 15,
       CMD_TIMESYNC = 16,
       CMD_ROLLBACK = 17,
+      CMD_REGISTER_EXCLUDE_REGION = 18,
 
       CMD_GET_MATCH_STATE = 4,
       CMD_SET_MATCH_SELECTIONS = 6,

@@ -5,11 +5,34 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <vector>
 
 #include "Common/Buffer.h"
 #include "Core/Rollback/IRollbackSaveSlot.h"
 
 static constexpr size_t PAGE_SIZE = 4096;
+
+namespace Rollback
+{
+
+// Specified as a Wii virtual address, stored internally as physical offsets
+struct ExcludeRegion
+{
+  uint32_t phys_start;  // virt_addr & 0x1FFF'FFFFu
+  uint32_t phys_end;    // phys_start + size
+
+  static ExcludeRegion FromVirt(uint32_t virt_addr, uint32_t size_bytes)
+  {
+    const uint32_t phys = virt_addr & 0x1FFF'FFFFu;
+    return {phys, phys + size_bytes};
+  }
+};
+
+void savestateMemcpy(void* dst, const void* src, size_t size,
+                     uint32_t dst_phys,
+                     const std::vector<ExcludeRegion>& exclude_regions);
+
+}  // namespace Rollback
 
 namespace Rollback
 {
@@ -71,7 +94,7 @@ public:
   void Save(Core::System& system) override;
   void Load(Core::System& system) override {}
 
-  void ApplyDeltaReverse() const;
+  void ApplyDeltaReverse(const std::vector<ExcludeRegion>& excl) const;
   bool RestoreNonDeltaState(Core::System& system);
   EvictedDelta ExtractDeltas();
   void MarkTouchedGlobalPages(std::bitset<JITDirtyBitmap::ENTRY_COUNT>& touched) const;

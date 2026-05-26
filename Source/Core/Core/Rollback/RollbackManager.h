@@ -4,12 +4,15 @@
 #pragma once
 
 #include <atomic>
+#include <bitset>
 #include <cstdint>
 #include <future>
 #include <memory>
 #include <shared_mutex>
+#include <vector>
 
 #include "Core/Rollback/DeltaSaveSlot.h"
+#include "Core/Brawlback/BrawlbackUtility.h"
 
 // Set to 1 to enable full-RAM shadow snapshots for rollback validation
 #define ROLLBACK_VALIDATE 0
@@ -21,7 +24,7 @@ class System;
 
 namespace Rollback
 {
-static constexpr int NUM_SAVE_SLOTS = 8;
+static constexpr int NUM_SAVE_SLOTS = MAX_ROLLBACK_FRAMES + 1;
 
 class RollbackManager
 {
@@ -42,6 +45,8 @@ public:
 
   void SaveFrame(Core::System& system);
   void LoadFrame(Core::System& system, int frames_back = 1);
+
+  void AddExcludeRegion(uint32_t virt_addr, uint32_t size_bytes);
 
   bool IsInitialized() const { return m_initialized; }
 
@@ -70,6 +75,8 @@ private:
   size_t   m_l1_cache_size = 0;
 
   DeltaSaveSlot m_slots[NUM_SAVE_SLOTS];
+
+  std::vector<ExcludeRegion> m_exclude_regions;
 
   int m_ring_next  = 0;  // index of the slot that will be written by the next savestate
   int m_ring_count = 0;

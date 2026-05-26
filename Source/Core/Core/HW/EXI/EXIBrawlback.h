@@ -34,6 +34,7 @@ private:
     // --- DMA handlers
     void handleCaptureSavestate(u8* data);
     void handleLoadSavestate(u8* data);
+    void handleRegisterExcludeRegion(u8* data);
     void handleLocalPadData(u8* data);
     void handleFindMatch(u8* payload);
     void handleStartMatch(u8* payload);
