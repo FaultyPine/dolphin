@@ -414,7 +414,9 @@ void RollbackManager::LoadFrame(Core::System& system, int frames_back)
   m_ring_count = m_ring_count - frames_back;
 
   if (ok)
-    OSD::AddMessage(fmt::format("Rolled back {} frame(s)", frames_back), 2000);
+  {
+    INFO_LOG_FMT(BRAWLBACK, "Rolled back {} frame(s)", frames_back);
+  }
   else
     OSD::AddMessage("Rollback state load failed", 3000, OSD::Color::RED);
 }
