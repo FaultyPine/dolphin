@@ -22,22 +22,21 @@ namespace Rollback
 
 #if ROLLBACK_VALIDATE
 
-// Physical offset of Brawl's "frames into current game" counter
-static constexpr uint32_t BRAWL_FRAME_COUNTER_PHYS = 0x8062B420 & 0x1FFFFFFF;
+// Brawlback's GAME_FRAME->persistentFrameCounter: 0x901812a0 + 0x14 = 0x901812b4 (MEM2).
+// MEM2 physical base is 0x10000000, so the byte offset within MEM2 is 0x001812b4.
+static constexpr uint32_t BRAWL_FRAME_COUNTER_MEM2_OFFSET = 0x001812b4u;
 
-static uint32_t ReadBrawlFrameCounter(const uint8_t* mem1_ptr, size_t mem1_size)
+static uint32_t ReadBrawlFrameCounter(const uint8_t* mem2_ptr, size_t mem2_size)
 {
-  if (!mem1_ptr || BRAWL_FRAME_COUNTER_PHYS + 4 > mem1_size)
+  if (!mem2_ptr || BRAWL_FRAME_COUNTER_MEM2_OFFSET + 4 > mem2_size)
     return 0;
   uint32_t raw;
-  std::memcpy(&raw, mem1_ptr + BRAWL_FRAME_COUNTER_PHYS, sizeof(raw));
+  std::memcpy(&raw, mem2_ptr + BRAWL_FRAME_COUNTER_MEM2_OFFSET, sizeof(raw));
   return Common::swap32(raw);
 }
 
-void RollbackManager::CaptureValSnapshot(int slot)
+void RollbackManager::CaptureFullRamSnapshot(RollbackSnapshot& snap)
 {
-  RollbackSnapshot& snap = m_val_snapshots[slot];
-
   if (!snap.mem1)
     snap.mem1 = std::make_unique<uint8_t[]>(m_mem1_size);
   std::memcpy(snap.mem1.get(), m_mem1_ptr, m_mem1_size);
@@ -49,11 +48,12 @@ void RollbackManager::CaptureValSnapshot(int slot)
     std::memcpy(snap.mem2.get(), m_mem2_ptr, m_mem2_size);
   }
 
-  snap.brawl_frame = ReadBrawlFrameCounter(m_mem1_ptr, m_mem1_size);
+  snap.brawl_frame = ReadBrawlFrameCounter(m_mem2_ptr, m_mem2_size);
   snap.valid = true;
 }
 
-void RollbackManager::CompareValSnapshot(int target_slot, int frames_back) const
+void RollbackManager::CompareValSnapshot(int target_slot, int frames_back,
+    const std::bitset<JITDirtyBitmap::ENTRY_COUNT>& target_pages) const
 {
   ROLLBACK_ZONE();
   const RollbackSnapshot& snap = m_val_snapshots[target_slot];
@@ -65,47 +65,80 @@ void RollbackManager::CompareValSnapshot(int target_slot, int frames_back) const
   }
 
   uint32_t mem1_mismatch = 0;
+  uint32_t mem1_mismatch_delta = 0;
+  uint32_t mem1_mismatch_gap   = 0;
   constexpr int MAX_LOG_PAGES = 8;
   uint32_t mismatch_pages[MAX_LOG_PAGES];
+  bool     mem1_mismatch_is_delta[MAX_LOG_PAGES] = {};
   const uint32_t mem1_page_count = static_cast<uint32_t>(m_mem1_size / PAGE_SIZE);
 
   for (uint32_t page = 0; page < mem1_page_count; ++page)
   {
+    const uint32_t page_phys = page * static_cast<uint32_t>(PAGE_SIZE);
+    bool excluded = false;
+    for (const auto& r : m_exclude_regions)
+      if (page_phys >= r.phys_start && page_phys < r.phys_end) { excluded = true; break; }
+    if (excluded)
+      continue;
+
     const size_t offset = static_cast<size_t>(page) * PAGE_SIZE;
     if (std::memcmp(m_mem1_ptr + offset, snap.mem1.get() + offset, PAGE_SIZE) != 0)
     {
+      const bool in_delta = target_pages.test(page);
+      if (in_delta) ++mem1_mismatch_delta; else ++mem1_mismatch_gap;
       if (mem1_mismatch < MAX_LOG_PAGES)
+      {
         mismatch_pages[mem1_mismatch] = page;
+        mem1_mismatch_is_delta[mem1_mismatch] = in_delta;
+      }
       ++mem1_mismatch;
     }
   }
 
   uint32_t mem2_mismatch = 0;
-  uint32_t mem2_mismatch_pages[MAX_LOG_PAGES];
+  uint32_t mem2_mismatch_delta = 0;   // wrong pages that were in target delta
+  uint32_t mem2_mismatch_gap   = 0;   // wrong pages that came from base snapshot
+  uint32_t mem2_mismatch_pages[MAX_LOG_PAGES] = {};
+  bool     mem2_mismatch_is_delta[MAX_LOG_PAGES] = {};
   if (snap.mem2 && m_mem2_ptr && m_mem2_size > 0)
   {
     const uint32_t mem2_page_count = static_cast<uint32_t>(m_mem2_size / PAGE_SIZE);
     for (uint32_t page = 0; page < mem2_page_count; ++page)
     {
+      const uint32_t page_phys = 0x10000000u + page * static_cast<uint32_t>(PAGE_SIZE);
+      bool excluded = false;
+      for (const auto& r : m_exclude_regions)
+        if (page_phys >= r.phys_start && page_phys < r.phys_end) { excluded = true; break; }
+      if (excluded)
+        continue;
+
       const size_t offset = static_cast<size_t>(page) * PAGE_SIZE;
       if (std::memcmp(m_mem2_ptr + offset, snap.mem2.get() + offset, PAGE_SIZE) != 0)
       {
+        const bool in_delta = target_pages.test(DeltaSaveSlot::MEM2_FIRST_PAGE + page);
+        if (in_delta) ++mem2_mismatch_delta; else ++mem2_mismatch_gap;
         if (mem2_mismatch < MAX_LOG_PAGES)
+        {
           mem2_mismatch_pages[mem2_mismatch] = page;
+          mem2_mismatch_is_delta[mem2_mismatch] = in_delta;
+        }
         ++mem2_mismatch;
       }
     }
   }
 
-  const uint32_t current_brawl_frame = ReadBrawlFrameCounter(m_mem1_ptr, m_mem1_size);
+  const uint32_t current_brawl_frame = ReadBrawlFrameCounter(m_mem2_ptr, m_mem2_size);
   const bool frame_ok = (current_brawl_frame == snap.brawl_frame);
   const char* frame_tag = frame_ok ? "frame_ok" : "FRAME_MISMATCH";
 
   if (mem1_mismatch == 0 && mem2_mismatch == 0)
   {
+    const ExcludeRegion& stack_excl = m_exclude_regions.back();
     INFO_LOG_FMT(COMMON,
-                 "[Rollback] VALIDATE OK  step={}  slot={}  brawl_frame={} (want {})  {}",
-                 frames_back, target_slot, current_brawl_frame, snap.brawl_frame, frame_tag);
+                 "[Rollback] VALIDATE OK  step={}  slot={}  brawl_frame={} (want {})  {}  "
+                 "stack_excl=[0x{:08x},0x{:08x})",
+                 frames_back, target_slot, current_brawl_frame, snap.brawl_frame, frame_tag,
+                 stack_excl.phys_start, stack_excl.phys_end);
     return;
   }
 
@@ -114,28 +147,42 @@ void RollbackManager::CompareValSnapshot(int target_slot, int frames_back) const
   for (uint32_t i = 0; i < mem1_logged; ++i)
   {
     if (i) mem1_list += ", ";
-    mem1_list += fmt::format("0x{:08x}", mismatch_pages[i] * static_cast<uint32_t>(PAGE_SIZE));
+    mem1_list += fmt::format("0x{:08x}({})",
+        mismatch_pages[i] * static_cast<uint32_t>(PAGE_SIZE),
+        mem1_mismatch_is_delta[i] ? "delta" : "gap");
   }
   if (mem1_mismatch > MAX_LOG_PAGES)
     mem1_list += fmt::format(" (+{} more)", mem1_mismatch - MAX_LOG_PAGES);
 
-  static constexpr uint32_t MEM2_PHYS_BASE = 0x10000000u;
   std::string mem2_list;
+  {
   const uint32_t mem2_logged = std::min(mem2_mismatch, static_cast<uint32_t>(MAX_LOG_PAGES));
+    static constexpr uint32_t MEM2_PHYS_BASE = 0x10000000u;
   for (uint32_t i = 0; i < mem2_logged; ++i)
   {
     if (i) mem2_list += ", ";
-    mem2_list += fmt::format("0x{:08x}",
-        MEM2_PHYS_BASE + mem2_mismatch_pages[i] * static_cast<uint32_t>(PAGE_SIZE));
+      mem2_list += fmt::format("0x{:08x}({})",
+          MEM2_PHYS_BASE + mem2_mismatch_pages[i] * static_cast<uint32_t>(PAGE_SIZE),
+          mem2_mismatch_is_delta[i] ? "delta" : "gap");
   }
   if (mem2_mismatch > MAX_LOG_PAGES)
     mem2_list += fmt::format(" (+{} more)", mem2_mismatch - MAX_LOG_PAGES);
+  }
 
+  // Also show the live stack exclusion zone so we can tell whether wrong pages
+  // are just outside it (which would explain state corruption on return).
+  const ExcludeRegion& stack_excl = m_exclude_regions.back();
   WARN_LOG_FMT(COMMON,
-               "[Rollback] VALIDATE FAIL  step={}  slot={}  - {} MEM1 page(s) wrong, {} MEM2 "
-               "page(s) wrong.  brawl_frame={} (want {})  {}\n  First MEM1 addrs: {}\n  First MEM2 addrs: {}",
-               frames_back, target_slot, mem1_mismatch, mem2_mismatch,
-               current_brawl_frame, snap.brawl_frame, frame_tag, mem1_list, mem2_list);
+               "[Rollback] VALIDATE FAIL  step={}  slot={}  - {} MEM1({} delta, {} gap) + "
+               "{} MEM2({} delta, {} gap) page(s) wrong.  "
+               "brawl_frame={} (want {})  {}  stack_excl=[0x{:08x},0x{:08x})\n"
+               "  First MEM1 addrs: {}\n  First MEM2 addrs: {}",
+               frames_back, target_slot,
+               mem1_mismatch, mem1_mismatch_delta, mem1_mismatch_gap,
+               mem2_mismatch, mem2_mismatch_delta, mem2_mismatch_gap,
+               current_brawl_frame, snap.brawl_frame, frame_tag,
+               stack_excl.phys_start, stack_excl.phys_end,
+               mem1_list, mem2_list);
 }
 
 void RollbackManager::InvalidateValSnapshots()
@@ -159,10 +206,12 @@ void RollbackManager::BeginDoState()
   VideoCommon_SetSkipGPUReadbackForRollback(true);
   m_skip_ios_in_dostate.store(true, std::memory_order_seq_cst);
   PowerPC_SetSkipDCacheFlushForRollback(true);
+  PowerPC_SetSkipCPURegsForRollback(true);
 }
 
 void RollbackManager::EndDoState()
 {
+  PowerPC_SetSkipCPURegsForRollback(false);
   PowerPC_SetSkipDCacheFlushForRollback(false);
   m_skip_ios_in_dostate.store(false, std::memory_order_seq_cst);
   VideoCommon_SetSkipGPUReadbackForRollback(false);
@@ -305,14 +354,8 @@ void RollbackManager::SaveFrame(Core::System& system)
   {
     ROLLBACK_ZONE_N("BaseSnapshot::Init");
     std::unique_lock lk(m_base_snapshot.mutex);
-    m_base_snapshot.mem1 = std::make_unique<uint8_t[]>(m_mem1_size);
-    std::memcpy(m_base_snapshot.mem1.get(), m_mem1_ptr, m_mem1_size);
-    if (m_mem2_ptr && m_mem2_size > 0)
-    {
-      m_base_snapshot.mem2 = std::make_unique<uint8_t[]>(m_mem2_size);
-      std::memcpy(m_base_snapshot.mem2.get(), m_mem2_ptr, m_mem2_size);
-    }
-    m_base_snapshot.valid = true;
+    CaptureFullRamSnapshot(m_base_snapshot);
+    INFO_LOG_FMT(BRAWLBACK, "Captured base snapshot at brawl frame {}", m_base_snapshot.brawl_frame);
   }
 
   const int slot = m_ring_next;
@@ -353,7 +396,8 @@ void RollbackManager::SaveFrame(Core::System& system)
   m_slots[slot].Save(system);
 
 #if ROLLBACK_VALIDATE
-  CaptureValSnapshot(slot);
+  RollbackSnapshot& snap = m_val_snapshots[slot];
+  CaptureFullRamSnapshot(snap);
 #endif
 }
 
@@ -372,6 +416,47 @@ void RollbackManager::LoadFrame(Core::System& system, int frames_back)
   }
 
   frames_back = std::clamp(frames_back, 1, m_ring_count - 1);
+
+  // Preserve the live call stack in RAM so execution continues normally
+  // after this load returns.  On PPC, r1 is the stack pointer and active
+  // frames live at addresses >= r1 (callers are above the current frame).
+  // We exclude those physical pages from the RAM restore so the function
+  // call chain that issued CMD_LOAD_SAVESTATE stays intact.
+  //
+  // Use the OS thread struct to find the exact stack top rather than
+  // assuming a fixed exclusion size (which could under- or over-cover).
+  // DAT_800000e4 (physical 0xe4) = current OSThread pointer (virtual).
+  // OSThread+0x304 = initialStackAddr (the HIGH end of the stack buffer).
+  const uint32_t r1_virt = system.GetPowerPC().GetPPCState().gpr[1];
+  const uint32_t r1_phys = r1_virt & 0x1FFF'FFFFu;
+  const uint32_t stack_page = r1_phys & ~(static_cast<uint32_t>(PAGE_SIZE) - 1u);
+
+  uint32_t stack_exclude_end = 0;
+  ASSERT(m_mem1_size > 0xe4 + 4);
+  uint32_t thread_virt;
+  std::memcpy(&thread_virt, m_mem1_ptr + 0xe4, 4);
+  thread_virt = Common::swap32(thread_virt);
+  const uint32_t thread_phys = thread_virt & 0x1FFF'FFFFu;
+  if (thread_phys + 0x308 <= m_mem1_size)
+  {
+    uint32_t stack_top_virt;
+    std::memcpy(&stack_top_virt, m_mem1_ptr + thread_phys + 0x304, 4);
+    stack_top_virt = Common::swap32(stack_top_virt);
+    const uint32_t stack_top_phys = stack_top_virt & 0x1FFF'FFFFu;
+    // Round up to next page boundary so the top page is fully covered.
+    const uint32_t stack_top_page =
+        (stack_top_phys + static_cast<uint32_t>(PAGE_SIZE) - 1u) &
+        ~(static_cast<uint32_t>(PAGE_SIZE) - 1u);
+    if (stack_top_page > stack_page && stack_top_page <= static_cast<uint32_t>(m_mem1_size))
+      stack_exclude_end = stack_top_page;
+  }
+  ASSERT(stack_exclude_end != 0);
+
+  INFO_LOG_FMT(BRAWLBACK,
+               "[Rollback] stack exclude: r1=0x{:08x} phys=[0x{:08x}, 0x{:08x}) ({} KB)",
+               r1_virt, stack_page, stack_exclude_end,
+               (stack_exclude_end - stack_page) / 1024);
+  m_exclude_regions.push_back(ExcludeRegion{stack_page, stack_exclude_end});
 
   const int most_recent = Wrap(m_ring_next - 1, NUM_SAVE_SLOTS);
 
@@ -428,10 +513,13 @@ void RollbackManager::LoadFrame(Core::System& system, int frames_back)
   }
 
 #if ROLLBACK_VALIDATE
-  CompareValSnapshot(target_slot, frames_back);
+  CompareValSnapshot(target_slot, frames_back, target_pages);
 #endif
 
   bool ok = m_slots[target_slot].RestoreNonDeltaState(system);
+
+  // Remove the temporary live-stack exclusion (always the last element pushed).
+  m_exclude_regions.pop_back();
 
   auto& bitmap = JITDirtyBitmap::Get();
   bitmap.ClearRange(0, static_cast<uint32_t>(m_mem1_size / PAGE_SIZE));

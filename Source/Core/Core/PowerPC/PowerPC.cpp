@@ -31,10 +31,16 @@
 #include "Core/System.h"
 
 static bool s_skip_dcache_flush_for_rollback = false;
+static bool s_skip_cpu_regs_for_rollback = false;
 
 void PowerPC_SetSkipDCacheFlushForRollback(bool skip)
 {
   s_skip_dcache_flush_for_rollback = skip;
+}
+
+void PowerPC_SetSkipCPURegsForRollback(bool skip)
+{
+  s_skip_cpu_regs_for_rollback = skip;
 }
 
 namespace PowerPC
@@ -88,42 +94,51 @@ void PowerPCManager::DoState(PointerWrap& p)
 
   const std::array<u32, 16> old_sr = m_ppc_state.sr;
 
-  p.DoArray(m_ppc_state.gpr);
-  p.Do(m_ppc_state.pc);
-  p.Do(m_ppc_state.npc);
-  p.DoArray(m_ppc_state.cr.fields);
-  p.Do(m_ppc_state.msr);
-  p.Do(m_ppc_state.fpscr);
-  p.Do(m_ppc_state.Exceptions);
-  p.Do(m_ppc_state.downcount);
-  p.Do(m_ppc_state.xer_ca);
-  p.Do(m_ppc_state.xer_so_ov);
-  p.Do(m_ppc_state.xer_stringctrl);
-  p.DoArray(m_ppc_state.ps);
-  p.DoArray(m_ppc_state.sr);
-  p.DoArray(m_ppc_state.spr);
-  p.DoArray(m_ppc_state.tlb);
-  p.Do(m_ppc_state.pagetable_base);
-  p.Do(m_ppc_state.pagetable_mask);
-  p.Do(m_ppc_state.pagetable_update_pending);
+  // BeginDoState sets s_skip_cpu_regs_for_rollback for *both* the Save pass
+  // (WriteMode) and the Load pass (ReadMode).  Skipping in both keeps the
+  // buffer layout identical, so the read pointer never goes out of sync.
+  // The live execution context (PC, SP, LR, all GPRs, …) is simply never
+  // touched, which is exactly what we want for rollback.
+  if (!s_skip_cpu_regs_for_rollback)
+  {
+    p.DoArray(m_ppc_state.gpr);
+    p.Do(m_ppc_state.pc);
+    p.Do(m_ppc_state.npc);
+    p.DoArray(m_ppc_state.cr.fields);
+    p.Do(m_ppc_state.msr);
+    p.Do(m_ppc_state.fpscr);
+    p.Do(m_ppc_state.Exceptions);
+    p.Do(m_ppc_state.downcount);
+    p.Do(m_ppc_state.xer_ca);
+    p.Do(m_ppc_state.xer_so_ov);
+    p.Do(m_ppc_state.xer_stringctrl);
+    p.DoArray(m_ppc_state.ps);
+    p.DoArray(m_ppc_state.sr);
+    p.DoArray(m_ppc_state.spr);
+    p.DoArray(m_ppc_state.tlb);
+    p.Do(m_ppc_state.pagetable_base);
+    p.Do(m_ppc_state.pagetable_mask);
+    p.Do(m_ppc_state.pagetable_update_pending);
+    p.Do(m_ppc_state.reserve);
+    p.Do(m_ppc_state.reserve_address);
 
-  p.Do(m_ppc_state.reserve);
-  p.Do(m_ppc_state.reserve_address);
-
-  auto& memory = m_system.GetMemory();
-  m_ppc_state.iCache.DoState(memory, p);
-  m_ppc_state.dCache.DoState(memory, p);
+    auto& memory = m_system.GetMemory();
+    m_ppc_state.iCache.DoState(memory, p);
+    m_ppc_state.dCache.DoState(memory, p);
+  }
 
   auto& mmu = m_system.GetMMU();
   if (p.IsReadMode())
   {
+    // sr is only changed by the p.DoArray above; when that was skipped, sr is
+    // unchanged so the delta is correctly false.
     mmu.DoState(p, old_sr != m_ppc_state.sr);
 
     // Cache state is restored from the save buffer during rollback; skip the flush.
     if (!m_ppc_state.m_enable_dcache && !s_skip_dcache_flush_for_rollback)
     {
       INFO_LOG_FMT(POWERPC, "Flushing data cache");
-      m_ppc_state.dCache.FlushAll(memory);
+      m_ppc_state.dCache.FlushAll(m_system.GetMemory());
     }
 
     RoundingModeUpdated(m_ppc_state);

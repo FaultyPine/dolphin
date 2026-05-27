@@ -98,8 +98,9 @@ private:
 #if ROLLBACK_VALIDATE
   RollbackSnapshot m_val_snapshots[NUM_SAVE_SLOTS];
 
-  void CaptureValSnapshot(int slot);
-  void CompareValSnapshot(int target_slot, int frames_back) const;
+  void CaptureFullRamSnapshot(RollbackSnapshot& snap);
+  void CompareValSnapshot(int target_slot, int frames_back,
+                          const std::bitset<JITDirtyBitmap::ENTRY_COUNT>& target_pages) const;
   void InvalidateValSnapshots();
 #endif
 };

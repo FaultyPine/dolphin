@@ -366,3 +366,8 @@ void RecalculateAllFeatureFlags(PowerPCState& ppc_state);
 }  // namespace PowerPC
 
 void PowerPC_SetSkipDCacheFlushForRollback(bool skip);
+// When set, PowerPCManager::DoState in ReadMode will snapshot the live CPU
+// register state before applying the save buffer and then restore it
+// afterwards.  This lets rollback loads keep the current execution context
+// (PC, SP, LR, all GPRs) instead of jumping back to the save-state PC.
+void PowerPC_SetSkipCPURegsForRollback(bool skip);

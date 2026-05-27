@@ -326,8 +326,11 @@ std::optional<IPCReply> FSDevice::Read(const ReadWriteRequest& request)
   return MakeIPCReply([&](Ticks t) {
     auto& system = GetSystem();
     auto& memory = system.GetMemory();
-    return m_core.Read(request.fd, memory.GetPointerForRange(request.buffer, request.size),
-                       request.size, request.buffer, t);
+    const s32 result = m_core.Read(request.fd, memory.GetPointerForRange(request.buffer, request.size),
+                                   request.size, request.buffer, t);
+    if (result > 0)
+      memory.MarkRangeDirty(request.buffer, static_cast<size_t>(result));
+    return result;
   });
 }
 
