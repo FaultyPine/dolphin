@@ -127,10 +127,11 @@ void DeltaSaveSlot::Reset()
   m_save_buffer.reset();
 }
 
-static void CaptureRegionDelta(RegionDelta& out, const uint8_t* entries,
+static void CaptureRegionDelta(RegionDelta& out, JITDirtyBitmap& dirty,
                                 uint32_t first_page, uint32_t page_count,
                                 const uint8_t* region_base)
 {
+  const uint8_t* entries = dirty.entries;
   uint32_t dirty_count = 0;
   for (uint32_t i = 0; i < page_count; ++i)
     if (entries[first_page + i]) ++dirty_count;
@@ -151,6 +152,8 @@ static void CaptureRegionDelta(RegionDelta& out, const uint8_t* entries,
                 PAGE_SIZE);
     ++written;
   }
+  // no longer dirty now that all page data has been captured
+  dirty.ClearRange(first_page, page_count);
 }
 
 // region_phys_base: Wii physical base of the region
@@ -177,14 +180,9 @@ void DeltaSaveSlot::Save(Core::System& system)
 
   auto& bitmap = JITDirtyBitmap::Get();
 
-  CaptureRegionDelta(m_mem1_delta, bitmap.entries, 0, m_mem1_page_count, m_mem1_ptr);
+  CaptureRegionDelta(m_mem1_delta, bitmap, 0, m_mem1_page_count, m_mem1_ptr);
   if (m_mem2_ptr && m_mem2_page_count > 0)
-    CaptureRegionDelta(m_mem2_delta, bitmap.entries, MEM2_FIRST_PAGE, m_mem2_page_count, m_mem2_ptr);
-
-  // no longer dirty now that all page data has been captured
-  bitmap.ClearRange(0, m_mem1_page_count);
-  if (m_mem2_ptr && m_mem2_page_count > 0)
-    bitmap.ClearRange(MEM2_FIRST_PAGE, m_mem2_page_count);
+    CaptureRegionDelta(m_mem2_delta, bitmap, MEM2_FIRST_PAGE, m_mem2_page_count, m_mem2_ptr);
 
   // L1 cache is outside JIT fastmem arena, not tracked by dirty bitmap
   if (m_l1_cache_ptr && m_l1_cache_size > 0 && m_l1_cache_snapshot.data())
