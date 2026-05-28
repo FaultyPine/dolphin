@@ -1057,6 +1057,10 @@ void MMU::ClearDCacheLine(u32 address)
   // is unlikely to matter.
   for (u32 i = 0; i < 32; i += 4)
     WriteToHardware<XCheckTLBFlag::Write, true>(address + i, 0, 4);
+
+  // Track the dcbz write so rollback's dirty bitmap knows this cache line was zeroed.
+  // `address` is already physical here; the bitmap page index matches what the JIT bitmap expects.
+  m_memory.MarkRangeDirty(address, 32);
 }
 
 void MMU::StoreDCacheLine(u32 address)
