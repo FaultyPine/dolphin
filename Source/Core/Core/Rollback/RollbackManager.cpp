@@ -245,13 +245,23 @@ void RollbackManager::Init(Core::System& system)
   if (m_initialized)
     Shutdown();
 
-  m_job_runtime.set_allow_work_stealing(true);
-  m_job_runtime.set_thread_name_function([](const char* name) { ROLLBACK_THREAD_NAME(name); });
-  m_rollback_jobs_context = {
-    .name = "Rollback Jobs",
-    .pool = m_job_runtime.get_pool("Rollback Job Pool", ROLLBACK_NUM_HELPER_THREADS),
-    .can_cancel = false,
-  };
+  // Initialize WSQ job system once; workers persist across save/load cycles.
+  if (!m_dispatch_thread)
+  {
+    m_job_ctx.activate();
+    // Worker 0 is "owned" by the rollback thread — used for job creation/dispatch.
+    // All initialize_worker calls must be sequential (no thread safety in ctx setup).
+    m_dispatch_thread = m_job_ctx.initialize_worker(0, nullptr);
+    for (int i = 1; i <= ROLLBACK_NUM_HELPER_THREADS; ++i)
+    {
+      job::JobTaskThread* thr = m_job_ctx.initialize_worker(
+          static_cast<int64_t>(i) * 0x9e3779b97f4a7c15LL, nullptr);
+      m_worker_threads.emplace_back([thr]() {
+        ROLLBACK_THREAD_NAME("Rollback Job Pool");
+        thr->wait_for_termination();
+      });
+    }
+  }
 
   m_exclude_regions = s_brawlback_hardcoded_exclude_regions;
   PerfInit();
@@ -289,8 +299,8 @@ void RollbackManager::Shutdown()
   if (!m_initialized)
     return;
 
-  if (!m_eviction_future.empty())
-    m_eviction_future.join();
+  if (m_eviction_future.valid())
+    m_eviction_future.wait();
 
   m_base_snapshot.valid = false;
   m_base_snapshot.mem1.reset();
@@ -310,6 +320,18 @@ void RollbackManager::Shutdown()
   m_frame_save_pending.store(false, std::memory_order_relaxed);
   m_frame_save_enabled.store(false, std::memory_order_relaxed);
   VideoCommon_SetSkipGPUReadbackForRollback(false);
+
+  // Signal WSQ workers to exit and wait for them.
+  // Workers are persistent — only tear them down on full shutdown.
+  if (m_dispatch_thread)
+  {
+    m_job_ctx.deactivate();
+    for (auto& t : m_worker_threads)
+      if (t.joinable()) t.join();
+    m_worker_threads.clear();
+    m_dispatch_thread = nullptr;
+  }
+
   m_initialized = false;
 
 #if ROLLBACK_VALIDATE
@@ -327,7 +349,7 @@ void RollbackManager::ToggleFrameSave()
     m_ring_next  = 0;
     m_ring_count = 0;
 
-    m_eviction_future.join();
+    if (m_eviction_future.valid()) m_eviction_future.wait();
     m_base_snapshot.valid = false;
 
     JITDirtyBitmap::Get().Clear();
@@ -373,11 +395,11 @@ void RollbackManager::SaveFrame(Core::System& system)
   // Evict the oldest slot, async apply its deltas to the base snapshot
   if (m_ring_count == NUM_SAVE_SLOTS)
   {
-    // wait for previous frame's eviction job. These are typically super fast, so this'll basically never actually block
-    if (!m_eviction_future.empty()) m_eviction_future.join();
+    // Wait for any in-flight eviction — typically completes within the same frame.
+    if (m_eviction_future.valid()) m_eviction_future.wait();
     auto evicted = std::make_shared<Rollback::EvictedDelta>(m_slots[slot].ExtractDeltas());
-    auto job = 
-      [this, evicted](jobs::cancelable&) mutable
+    m_eviction_future = std::async(std::launch::async,
+      [this, evicted]() mutable
       {
         ROLLBACK_THREAD_NAME("Rollback Eviction");
         ROLLBACK_ZONE_N("BaseSnapshot::Evict");
@@ -399,9 +421,7 @@ void RollbackManager::SaveFrame(Core::System& system)
             std::memcpy(m_base_snapshot.mem2.get() + dst_off, src + i * PAGE_SIZE, PAGE_SIZE);
           }
         }
-        return true;
-      };
-      m_eviction_future = m_job_runtime.dispatch(job);
+      });
   }
 
   m_ring_next  = Wrap(m_ring_next + 1, NUM_SAVE_SLOTS);

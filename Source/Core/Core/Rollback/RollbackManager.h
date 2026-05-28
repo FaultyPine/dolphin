@@ -9,11 +9,12 @@
 #include <future>
 #include <memory>
 #include <shared_mutex>
+#include <thread>
 #include <vector>
 
 #include "Core/Rollback/DeltaSaveSlot.h"
 #include "Core/Brawlback/BrawlbackUtility.h"
-#include "weejobs.h"
+#include "job.h"
 
 // Set to 1 to enable full-RAM shadow snapshots for rollback validation
 #define ROLLBACK_VALIDATE 0
@@ -65,8 +66,11 @@ public:
 
   void NotifyDBATMappingsWereUpdated() {}
 
-  jobs::runtime m_job_runtime;
-  jobs::context m_rollback_jobs_context;
+  // WSQ job system: m_dispatch_thread is worker 0, owned by the rollback thread.
+  // Background workers run wait_for_termination() on their own std::threads.
+  job::JobSysCtx       m_job_ctx;
+  job::JobTaskThread*  m_dispatch_thread = nullptr;
+  std::vector<std::thread> m_worker_threads;
 
 private:
   bool m_initialized = false;
@@ -97,7 +101,7 @@ private:
   // Rolling base: full MEM1+MEM2 state at the oldest reachable frame
   RollbackSnapshot m_base_snapshot;
 
-  jobs::future<bool> m_eviction_future;
+  std::future<void> m_eviction_future;
 
   void CaptureFullRamSnapshot(RollbackSnapshot& snap);
 
