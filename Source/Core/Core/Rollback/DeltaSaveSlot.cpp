@@ -155,7 +155,7 @@ static void CaptureRegionDelta(RegionDelta& out, const JITDirtyBitmap& dirty,
 
 // region_phys_base: Wii physical base of the region
 //   MEM1 -> 0,          MEM2 -> 0x10000000
-static void RestoreRegionDelta(const RegionDelta& delta, uint8_t* region_base,
+void RestoreRegionDelta(const RegionDelta& delta, uint8_t* region_base,
                                uint32_t region_phys_base,
                                const std::vector<ExcludeRegion>& excl)
 {
@@ -234,22 +234,6 @@ void DeltaSaveSlot::MarkTouchedGlobalPages(std::bitset<JITDirtyBitmap::ENTRY_COU
     touched.set(m_mem1_delta.page_indices[i]);
   for (uint32_t i = 0; i < m_mem2_delta.page_count; ++i)
     touched.set(MEM2_FIRST_PAGE + m_mem2_delta.page_indices[i]);
-}
-
-void DeltaSaveSlot::ApplyDeltaReverse(const std::vector<ExcludeRegion>& excl) const
-{
-  ROLLBACK_ZONE();
-  ASSERT(m_has_state);
-  ASSERT(m_mem1_ptr);
-  {
-    ROLLBACK_ZONE_N("mem1 delta apply");
-    RestoreRegionDelta(m_mem1_delta, m_mem1_ptr, 0u, excl);
-  }
-  {
-    ROLLBACK_ZONE_N("mem2 delta apply");
-    if (m_mem2_ptr && m_mem2_page_count > 0)
-      RestoreRegionDelta(m_mem2_delta, m_mem2_ptr, MEM2_BASE, excl);
-  }
 }
 
 }  // namespace Rollback

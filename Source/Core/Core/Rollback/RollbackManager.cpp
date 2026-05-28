@@ -487,12 +487,22 @@ void RollbackManager::LoadFrame(Core::System& system, int frames_back)
   for (int step = 1; step <= frames_back; ++step)
   {
     const int slot = Wrap(most_recent - step, NUM_SAVE_SLOTS);
-    m_slots[slot].ApplyDeltaReverse(m_exclude_regions);
+    Rollback::DeltaSaveSlot& delta = m_slots[slot];
+    {
+      ROLLBACK_ZONE_N("mem1 delta apply");
+      RestoreRegionDelta(delta.m_mem1_delta, m_mem1_ptr, 0u, m_exclude_regions);
+    }
+    {
+      ROLLBACK_ZONE_N("mem2 delta apply");
+      if (m_mem2_ptr && delta.m_mem2_page_count > 0)
+        RestoreRegionDelta(delta.m_mem2_delta, m_mem2_ptr, MEM2_BASE, m_exclude_regions);
+    }
   }
 
   // Restore gap pages from base; read lock waits out any in-flight eviction
   {
     ROLLBACK_ZONE_N("GapPageRestore");
+    int numPagesToRestore = 0;
     std::shared_lock lk(m_base_snapshot.mutex);
     if (m_base_snapshot.valid)
     {
@@ -506,6 +516,7 @@ void RollbackManager::LoadFrame(Core::System& system, int frames_back)
                           PAGE_SIZE,
                           p * static_cast<uint32_t>(PAGE_SIZE),
                           m_exclude_regions);
+          numPagesToRestore++;
         }
       }
       if (m_mem2_ptr && m_base_snapshot.mem2)
@@ -520,15 +531,14 @@ void RollbackManager::LoadFrame(Core::System& system, int frames_back)
                             PAGE_SIZE,
                             0x10000000u + p * static_cast<uint32_t>(PAGE_SIZE),
                             m_exclude_regions);
+            numPagesToRestore++;
           }
         }
       }
     }
+    auto x = StringFromFormat("Restored %u gap page(s) from base snapshot", numPagesToRestore);
+    ZoneText(x.c_str(), x.size());
   }
-
-#if ROLLBACK_VALIDATE
-  CompareValSnapshot(target_slot, frames_back, target_pages);
-#endif
 
   DeltaSaveSlot& deltaSave = m_slots[target_slot];
   {
@@ -546,7 +556,9 @@ void RollbackManager::LoadFrame(Core::System& system, int frames_back)
     EndDoState();
   }
 
-  //bool ok = m_slots[target_slot].RestoreNonDeltaState(system);
+#if ROLLBACK_VALIDATE
+  CompareValSnapshot(target_slot, frames_back, target_pages);
+#endif
 
   // Remove the temporary live-stack exclusion (always the last element pushed).
   m_exclude_regions.pop_back();

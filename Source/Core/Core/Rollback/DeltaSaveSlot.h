@@ -95,7 +95,6 @@ public:
   void Save(Core::System& system) override;
   void Load(Core::System& system) override {}
 
-  void ApplyDeltaReverse(const std::vector<ExcludeRegion>& excl) const;
   EvictedDelta ExtractDeltas();
   void MarkTouchedGlobalPages(std::bitset<JITDirtyBitmap::ENTRY_COUNT>& touched) const;
 
@@ -117,5 +116,7 @@ public:
 
   bool m_has_state = false;
 };
+
+void RestoreRegionDelta(const RegionDelta& delta, uint8_t* region_base, uint32_t region_phys_base, const std::vector<ExcludeRegion>& excl);
 
 }  // namespace Rollback
