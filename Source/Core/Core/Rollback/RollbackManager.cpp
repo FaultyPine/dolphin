@@ -20,8 +20,6 @@
 namespace Rollback
 {
 
-#if ROLLBACK_VALIDATE
-
 // Brawlback's GAME_FRAME->persistentFrameCounter: 0x901812a0 + 0x14 = 0x901812b4 (MEM2).
 // MEM2 physical base is 0x10000000, so the byte offset within MEM2 is 0x001812b4.
 static constexpr uint32_t BRAWL_FRAME_COUNTER_MEM2_OFFSET = 0x001812b4u;
@@ -51,6 +49,8 @@ void RollbackManager::CaptureFullRamSnapshot(RollbackSnapshot& snap)
   snap.brawl_frame = ReadBrawlFrameCounter(m_mem2_ptr, m_mem2_size);
   snap.valid = true;
 }
+
+#if ROLLBACK_VALIDATE
 
 void RollbackManager::CompareValSnapshot(int target_slot, int frames_back,
     const std::bitset<JITDirtyBitmap::ENTRY_COUNT>& target_pages) const
@@ -244,6 +244,15 @@ void RollbackManager::Init(Core::System& system)
   if (m_initialized)
     Shutdown();
 
+  m_job_runtime.set_allow_work_stealing(true);
+  m_job_runtime.set_thread_name_function([](const char* name) { ROLLBACK_THREAD_NAME(name); });
+  m_rollback_jobs_context = {
+    .name = "Rollback Jobs",
+    .pool = m_job_runtime.get_pool("Rollback Job Pool", ROLLBACK_NUM_HELPER_THREADS),
+    .group = jobs::jobgroup::create(),
+    .can_cancel = false,
+  };
+
   m_exclude_regions = s_brawlback_hardcoded_exclude_regions;
   PerfInit();
 
@@ -280,7 +289,8 @@ void RollbackManager::Shutdown()
   if (!m_initialized)
     return;
 
-  m_eviction_future = {};  // Wait for any in-flight eviction.
+  if (!m_eviction_future.empty())
+    m_eviction_future.join();
 
   m_base_snapshot.valid = false;
   m_base_snapshot.mem1.reset();
@@ -317,7 +327,7 @@ void RollbackManager::ToggleFrameSave()
     m_ring_next  = 0;
     m_ring_count = 0;
 
-    m_eviction_future = {};
+    m_eviction_future.join();
     m_base_snapshot.valid = false;
 
     JITDirtyBitmap::Get().Clear();
@@ -363,31 +373,35 @@ void RollbackManager::SaveFrame(Core::System& system)
   // Evict the oldest slot, async apply its deltas to the base snapshot
   if (m_ring_count == NUM_SAVE_SLOTS)
   {
-    auto evicted = m_slots[slot].ExtractDeltas();
-    m_eviction_future = std::async(std::launch::async,
-        [this, evicted = std::move(evicted)]() mutable
+    // wait for previous frame's eviction job. These are typically super fast, so this'll basically never actually block
+    if (!m_eviction_future.empty()) m_eviction_future.join();
+    auto evicted = std::make_shared<Rollback::EvictedDelta>(m_slots[slot].ExtractDeltas());
+    auto job = 
+      [this, evicted](jobs::cancelable&) mutable
+      {
+        ROLLBACK_THREAD_NAME("Rollback Eviction");
+        ROLLBACK_ZONE_N("BaseSnapshot::Evict");
+        std::unique_lock lk(m_base_snapshot.mutex);
+
+        const uint8_t* src = evicted->mem1.page_data.data();
+        for (uint32_t i = 0; i < evicted->mem1.page_count; ++i)
         {
-          ROLLBACK_THREAD_NAME("Rollback Eviction");
-          ROLLBACK_ZONE_N("BaseSnapshot::Evict");
-          std::unique_lock lk(m_base_snapshot.mutex);
+          const size_t dst_off = static_cast<size_t>(evicted->mem1.page_indices[i]) * PAGE_SIZE;
+          std::memcpy(m_base_snapshot.mem1.get() + dst_off, src + i * PAGE_SIZE, PAGE_SIZE);
+        }
 
-          const uint8_t* src = evicted.mem1.page_data.data();
-          for (uint32_t i = 0; i < evicted.mem1.page_count; ++i)
+        if (m_base_snapshot.mem2)
+        {
+          src = evicted->mem2.page_data.data();
+          for (uint32_t i = 0; i < evicted->mem2.page_count; ++i)
           {
-            const size_t dst_off = static_cast<size_t>(evicted.mem1.page_indices[i]) * PAGE_SIZE;
-            std::memcpy(m_base_snapshot.mem1.get() + dst_off, src + i * PAGE_SIZE, PAGE_SIZE);
+            const size_t dst_off = static_cast<size_t>(evicted->mem2.page_indices[i]) * PAGE_SIZE;
+            std::memcpy(m_base_snapshot.mem2.get() + dst_off, src + i * PAGE_SIZE, PAGE_SIZE);
           }
-
-          if (m_base_snapshot.mem2)
-          {
-            src = evicted.mem2.page_data.data();
-            for (uint32_t i = 0; i < evicted.mem2.page_count; ++i)
-            {
-              const size_t dst_off = static_cast<size_t>(evicted.mem2.page_indices[i]) * PAGE_SIZE;
-              std::memcpy(m_base_snapshot.mem2.get() + dst_off, src + i * PAGE_SIZE, PAGE_SIZE);
-            }
-          }
-        });
+        }
+        return true;
+      };
+      m_eviction_future = m_job_runtime.dispatch(job);
   }
 
   m_ring_next  = Wrap(m_ring_next + 1, NUM_SAVE_SLOTS);

@@ -175,42 +175,54 @@ static void RestoreRegionDelta(const RegionDelta& delta, uint8_t* region_base,
 void DeltaSaveSlot::Save(Core::System& system)
 {
   ROLLBACK_ZONE();
-
   ASSERT(m_mem1_ptr);
-
   auto& bitmap = JITDirtyBitmap::Get();
-
-  CaptureRegionDelta(m_mem1_delta, bitmap, 0, m_mem1_page_count, m_mem1_ptr);
-  if (m_mem2_ptr && m_mem2_page_count > 0)
-    CaptureRegionDelta(m_mem2_delta, bitmap, MEM2_FIRST_PAGE, m_mem2_page_count, m_mem2_ptr);
-
-  // L1 cache is outside JIT fastmem arena, not tracked by dirty bitmap
-  if (m_l1_cache_ptr && m_l1_cache_size > 0 && m_l1_cache_snapshot.data())
-    std::memcpy(m_l1_cache_snapshot.data(), m_l1_cache_ptr, m_l1_cache_size);
-
-  auto& mgr = RollbackManager::Get();
-  mgr.BeginDoState();
-  State::SaveToBuffer(system, m_save_buffer);
-  mgr.EndDoState();
-
+  auto& rbm = RollbackManager::Get();
+  {
+    ROLLBACK_ZONE_N("mem1 save");
+    CaptureRegionDelta(m_mem1_delta, bitmap, 0, m_mem1_page_count, m_mem1_ptr);
+  }
+  {
+    ROLLBACK_ZONE_N("mem2 copy");
+    if (m_mem2_ptr && m_mem2_page_count > 0)
+      CaptureRegionDelta(m_mem2_delta, bitmap, MEM2_FIRST_PAGE, m_mem2_page_count, m_mem2_ptr);
+  }
+  {
+    ROLLBACK_ZONE_N("L1 cache copy");
+    // L1 cache is outside JIT fastmem arena, not tracked by dirty bitmap
+    if (m_l1_cache_ptr && m_l1_cache_size > 0 && m_l1_cache_snapshot.data())
+      std::memcpy(m_l1_cache_snapshot.data(), m_l1_cache_ptr, m_l1_cache_size);
+  }
+  {
+    ROLLBACK_ZONE_N("DoState save");
+    rbm.BeginDoState();
+    State::SaveToBuffer(system, m_save_buffer);
+    rbm.EndDoState();
+  }
   m_has_state = true;
 }
 
 bool DeltaSaveSlot::RestoreNonDeltaState(Core::System& system)
 {
   ROLLBACK_ZONE();
-
   ASSERT(m_has_state);
-
-  if (m_l1_cache_ptr && m_l1_cache_size > 0 && m_l1_cache_snapshot.data())
-    std::memcpy(m_l1_cache_ptr, m_l1_cache_snapshot.data(), m_l1_cache_size);
-
   auto& mgr = RollbackManager::Get();
-  mgr.BeginDoState();
-  const bool ok = State::LoadFromBuffer(
-      system, std::span<uint8_t>(m_save_buffer.data(), m_save_buffer.size()));
-  mgr.EndDoState();
 
+  {
+    ROLLBACK_ZONE_N("L1 cache restore");
+    if (m_l1_cache_ptr && m_l1_cache_size > 0 && m_l1_cache_snapshot.data())
+      std::memcpy(m_l1_cache_ptr, m_l1_cache_snapshot.data(), m_l1_cache_size);
+  }
+
+  bool ok = false;
+  {
+    ROLLBACK_ZONE_N("DoState restore");
+    mgr.BeginDoState();
+    ok = State::LoadFromBuffer(
+        system, std::span<uint8_t>(m_save_buffer.data(), m_save_buffer.size()));
+    mgr.EndDoState();
+  }
+  
   return ok;
 }
 
@@ -236,13 +248,17 @@ void DeltaSaveSlot::MarkTouchedGlobalPages(std::bitset<JITDirtyBitmap::ENTRY_COU
 void DeltaSaveSlot::ApplyDeltaReverse(const std::vector<ExcludeRegion>& excl) const
 {
   ROLLBACK_ZONE();
-
   ASSERT(m_has_state);
   ASSERT(m_mem1_ptr);
-
-  RestoreRegionDelta(m_mem1_delta, m_mem1_ptr, 0u, excl);
-  if (m_mem2_ptr && m_mem2_page_count > 0)
-    RestoreRegionDelta(m_mem2_delta, m_mem2_ptr, 0x10000000u, excl);
+  {
+    ROLLBACK_ZONE_N("mem1 delta apply");
+    RestoreRegionDelta(m_mem1_delta, m_mem1_ptr, 0u, excl);
+  }
+  {
+    ROLLBACK_ZONE_N("mem2 delta apply");
+    if (m_mem2_ptr && m_mem2_page_count > 0)
+      RestoreRegionDelta(m_mem2_delta, m_mem2_ptr, 0x10000000u, excl);
+  }
 }
 
 }  // namespace Rollback

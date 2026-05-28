@@ -13,6 +13,7 @@
 
 #include "Core/Rollback/DeltaSaveSlot.h"
 #include "Core/Brawlback/BrawlbackUtility.h"
+#include "weejobs.h"
 
 // Set to 1 to enable full-RAM shadow snapshots for rollback validation
 #define ROLLBACK_VALIDATE 0
@@ -25,7 +26,7 @@ class System;
 namespace Rollback
 {
 static constexpr int NUM_SAVE_SLOTS = MAX_ROLLBACK_FRAMES + 1;
-
+static constexpr int ROLLBACK_NUM_HELPER_THREADS = 4;
 class RollbackManager
 {
 public:
@@ -93,12 +94,17 @@ private:
   // Rolling base: full MEM1+MEM2 state at the oldest reachable frame
   RollbackSnapshot m_base_snapshot;
 
-  std::future<void> m_eviction_future;
+  jobs::future<bool> m_eviction_future;
+
+  jobs::runtime m_job_runtime;
+
+  jobs::context m_rollback_jobs_context;
+
+  void CaptureFullRamSnapshot(RollbackSnapshot& snap);
 
 #if ROLLBACK_VALIDATE
   RollbackSnapshot m_val_snapshots[NUM_SAVE_SLOTS];
 
-  void CaptureFullRamSnapshot(RollbackSnapshot& snap);
   void CompareValSnapshot(int target_slot, int frames_back,
                           const std::bitset<JITDirtyBitmap::ENTRY_COUNT>& target_pages) const;
   void InvalidateValSnapshots();
