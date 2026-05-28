@@ -16,6 +16,7 @@
 #include "Core/System.h"
 #include "VideoCommon/OnScreenDisplay.h"
 #include "VideoCommon/VideoState.h"
+#include <Core/State.h>
 
 namespace Rollback
 {
@@ -430,49 +431,49 @@ void RollbackManager::LoadFrame(Core::System& system, int frames_back)
 
   frames_back = std::clamp(frames_back, 1, m_ring_count - 1);
 
-  // Preserve the live call stack in RAM so execution continues normally
-  // after this load returns.  On PPC, r1 is the stack pointer and active
-  // frames live at addresses >= r1 (callers are above the current frame).
-  // We exclude those physical pages from the RAM restore so the function
-  // call chain that issued CMD_LOAD_SAVESTATE stays intact.
-  //
-  // Use the OS thread struct to find the exact stack top rather than
-  // assuming a fixed exclusion size (which could under- or over-cover).
-  // DAT_800000e4 (physical 0xe4) = current OSThread pointer (virtual).
-  // OSThread+0x304 = initialStackAddr (the HIGH end of the stack buffer).
-  const uint32_t r1_virt = system.GetPowerPC().GetPPCState().gpr[1];
-  const uint32_t r1_phys = r1_virt & 0x1FFF'FFFFu;
-  const uint32_t stack_page = r1_phys & ~(static_cast<uint32_t>(PAGE_SIZE) - 1u);
-
-  uint32_t stack_exclude_end = 0;
-  ASSERT(m_mem1_size > 0xe4 + 4);
-  uint32_t thread_virt;
-  std::memcpy(&thread_virt, m_mem1_ptr + 0xe4, 4);
-  thread_virt = Common::swap32(thread_virt);
-  const uint32_t thread_phys = thread_virt & 0x1FFF'FFFFu;
-  if (thread_phys + 0x308 <= m_mem1_size)
   {
-    uint32_t stack_top_virt;
-    std::memcpy(&stack_top_virt, m_mem1_ptr + thread_phys + 0x304, 4);
-    stack_top_virt = Common::swap32(stack_top_virt);
-    const uint32_t stack_top_phys = stack_top_virt & 0x1FFF'FFFFu;
-    // Round up to next page boundary so the top page is fully covered.
-    const uint32_t stack_top_page =
-        (stack_top_phys + static_cast<uint32_t>(PAGE_SIZE) - 1u) &
-        ~(static_cast<uint32_t>(PAGE_SIZE) - 1u);
-    if (stack_top_page > stack_page && stack_top_page <= static_cast<uint32_t>(m_mem1_size))
-      stack_exclude_end = stack_top_page;
-  }
-  ASSERT(stack_exclude_end != 0);
+    ROLLBACK_ZONE_N("Preserve stack");
+    // Preserve the live call stack in RAM so execution continues normally
+    // after this load returns.  On PPC, r1 is the stack pointer and active
+    // frames live at addresses >= r1 (callers are above the current frame).
+    // We exclude those physical pages from the RAM restore so the function
+    // call chain that issued CMD_LOAD_SAVESTATE stays intact.
+    //
+    // Use the OS thread struct to find the exact stack top rather than
+    // assuming a fixed exclusion size (which could under- or over-cover).
+    // DAT_800000e4 (physical 0xe4) = current OSThread pointer (virtual).
+    // OSThread+0x304 = initialStackAddr (the HIGH end of the stack buffer).
+    const uint32_t r1_virt = system.GetPowerPC().GetPPCState().gpr[1];
+    const uint32_t r1_phys = r1_virt & 0x1FFF'FFFFu;
+    const uint32_t stack_page = r1_phys & ~(static_cast<uint32_t>(PAGE_SIZE) - 1u);
 
-  INFO_LOG_FMT(BRAWLBACK,
-               "[Rollback] stack exclude: r1=0x{:08x} phys=[0x{:08x}, 0x{:08x}) ({} KB)",
-               r1_virt, stack_page, stack_exclude_end,
-               (stack_exclude_end - stack_page) / 1024);
-  m_exclude_regions.push_back(ExcludeRegion{stack_page, stack_exclude_end});
+    uint32_t stack_exclude_end = 0;
+    ASSERT(m_mem1_size > 0xe4 + 4);
+    uint32_t thread_virt;
+    std::memcpy(&thread_virt, m_mem1_ptr + 0xe4, 4);
+    thread_virt = Common::swap32(thread_virt);
+    const uint32_t thread_phys = thread_virt & 0x1FFF'FFFFu;
+    if (thread_phys + 0x308 <= m_mem1_size)
+    {
+      uint32_t stack_top_virt;
+      std::memcpy(&stack_top_virt, m_mem1_ptr + thread_phys + 0x304, 4);
+      stack_top_virt = Common::swap32(stack_top_virt);
+      const uint32_t stack_top_phys = stack_top_virt & 0x1FFF'FFFFu;
+      // Round up to next page boundary so the top page is fully covered.
+      const uint32_t stack_top_page = (stack_top_phys + static_cast<uint32_t>(PAGE_SIZE) - 1u) &
+                                      ~(static_cast<uint32_t>(PAGE_SIZE) - 1u);
+      if (stack_top_page > stack_page && stack_top_page <= static_cast<uint32_t>(m_mem1_size))
+        stack_exclude_end = stack_top_page;
+    }
+    ASSERT(stack_exclude_end != 0);
+
+    INFO_LOG_FMT(BRAWLBACK,
+                 "[Rollback] stack exclude: r1=0x{:08x} phys=[0x{:08x}, 0x{:08x}) ({} KB)", r1_virt,
+                 stack_page, stack_exclude_end, (stack_exclude_end - stack_page) / 1024);
+    m_exclude_regions.push_back(ExcludeRegion{stack_page, stack_exclude_end});
+  }
 
   const int most_recent = Wrap(m_ring_next - 1, NUM_SAVE_SLOTS);
-
 
   const int target_slot = Wrap(most_recent - frames_back, NUM_SAVE_SLOTS);
 
@@ -512,7 +513,7 @@ void RollbackManager::LoadFrame(Core::System& system, int frames_back)
         const uint32_t mem2_pages = static_cast<uint32_t>(m_mem2_size / PAGE_SIZE);
         for (uint32_t p = 0; p < mem2_pages; ++p)
         {
-          if (!target_pages.test(DeltaSaveSlot::MEM2_FIRST_PAGE + p))
+          if (!target_pages.test(MEM2_FIRST_PAGE + p))
           {
             savestateMemcpy(m_mem2_ptr + p * PAGE_SIZE,
                             m_base_snapshot.mem2.get() + p * PAGE_SIZE,
@@ -529,7 +530,23 @@ void RollbackManager::LoadFrame(Core::System& system, int frames_back)
   CompareValSnapshot(target_slot, frames_back, target_pages);
 #endif
 
-  bool ok = m_slots[target_slot].RestoreNonDeltaState(system);
+  DeltaSaveSlot& deltaSave = m_slots[target_slot];
+  {
+    ROLLBACK_ZONE_N("L1 cache restore");
+    if (m_l1_cache_ptr && m_l1_cache_size > 0 && deltaSave.m_l1_cache_snapshot.data())
+      std::memcpy(m_l1_cache_ptr, deltaSave.m_l1_cache_snapshot.data(), m_l1_cache_size);
+  }
+
+  bool ok = false;
+  {
+    ROLLBACK_ZONE_N("DoState restore");
+    BeginDoState();
+    ok = State::LoadFromBuffer(
+        system, std::span<uint8_t>(deltaSave.m_save_buffer.data(), deltaSave.m_save_buffer.size()));
+    EndDoState();
+  }
+
+  //bool ok = m_slots[target_slot].RestoreNonDeltaState(system);
 
   // Remove the temporary live-stack exclusion (always the last element pushed).
   m_exclude_regions.pop_back();
@@ -537,7 +554,7 @@ void RollbackManager::LoadFrame(Core::System& system, int frames_back)
   auto& bitmap = JITDirtyBitmap::Get();
   bitmap.ClearRange(0, static_cast<uint32_t>(m_mem1_size / PAGE_SIZE));
   if (m_mem2_ptr && m_mem2_size > 0)
-    bitmap.ClearRange(DeltaSaveSlot::MEM2_FIRST_PAGE,
+    bitmap.ClearRange(MEM2_FIRST_PAGE,
                       static_cast<uint32_t>(m_mem2_size / PAGE_SIZE));
 
   // After loading, the target slot becomes the new "oldest" slot,

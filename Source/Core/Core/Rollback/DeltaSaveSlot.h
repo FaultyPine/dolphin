@@ -11,6 +11,8 @@
 #include "Core/Rollback/IRollbackSaveSlot.h"
 
 static constexpr size_t PAGE_SIZE = 4096;
+static constexpr uint32_t MEM2_BASE = 0x10000000u;
+static constexpr uint32_t MEM2_FIRST_PAGE = MEM2_BASE / 4096u;
 
 namespace Rollback
 {
@@ -83,7 +85,6 @@ struct EvictedDelta
 class DeltaSaveSlot final : public IRollbackSaveSlot
 {
 public:
-  static constexpr uint32_t MEM2_FIRST_PAGE = 0x10000000u / 4096u;
 
   void Init(uint8_t* mem1_ptr, size_t mem1_size,
             uint8_t* mem2_ptr, size_t mem2_size,
@@ -95,11 +96,9 @@ public:
   void Load(Core::System& system) override {}
 
   void ApplyDeltaReverse(const std::vector<ExcludeRegion>& excl) const;
-  bool RestoreNonDeltaState(Core::System& system);
   EvictedDelta ExtractDeltas();
   void MarkTouchedGlobalPages(std::bitset<JITDirtyBitmap::ENTRY_COUNT>& touched) const;
 
-private:
   uint8_t* m_mem1_ptr      = nullptr;
   size_t   m_mem1_size     = 0;
   uint8_t* m_mem2_ptr      = nullptr;

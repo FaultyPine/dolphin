@@ -217,30 +217,6 @@ void DeltaSaveSlot::Save(Core::System& system)
   m_has_state = true;
 }
 
-bool DeltaSaveSlot::RestoreNonDeltaState(Core::System& system)
-{
-  ROLLBACK_ZONE();
-  ASSERT(m_has_state);
-  auto& mgr = RollbackManager::Get();
-
-  {
-    ROLLBACK_ZONE_N("L1 cache restore");
-    if (m_l1_cache_ptr && m_l1_cache_size > 0 && m_l1_cache_snapshot.data())
-      std::memcpy(m_l1_cache_ptr, m_l1_cache_snapshot.data(), m_l1_cache_size);
-  }
-
-  bool ok = false;
-  {
-    ROLLBACK_ZONE_N("DoState restore");
-    mgr.BeginDoState();
-    ok = State::LoadFromBuffer(
-        system, std::span<uint8_t>(m_save_buffer.data(), m_save_buffer.size()));
-    mgr.EndDoState();
-  }
-  
-  return ok;
-}
-
 EvictedDelta DeltaSaveSlot::ExtractDeltas()
 {
   ROLLBACK_ZONE();
@@ -272,7 +248,7 @@ void DeltaSaveSlot::ApplyDeltaReverse(const std::vector<ExcludeRegion>& excl) co
   {
     ROLLBACK_ZONE_N("mem2 delta apply");
     if (m_mem2_ptr && m_mem2_page_count > 0)
-      RestoreRegionDelta(m_mem2_delta, m_mem2_ptr, 0x10000000u, excl);
+      RestoreRegionDelta(m_mem2_delta, m_mem2_ptr, MEM2_BASE, excl);
   }
 }
 
