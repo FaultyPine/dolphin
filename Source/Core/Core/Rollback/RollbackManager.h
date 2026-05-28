@@ -65,6 +65,9 @@ public:
 
   void NotifyDBATMappingsWereUpdated() {}
 
+  jobs::runtime m_job_runtime;
+  jobs::context m_rollback_jobs_context;
+
 private:
   bool m_initialized = false;
 
@@ -95,10 +98,6 @@ private:
   RollbackSnapshot m_base_snapshot;
 
   jobs::future<bool> m_eviction_future;
-
-  jobs::runtime m_job_runtime;
-
-  jobs::context m_rollback_jobs_context;
 
   void CaptureFullRamSnapshot(RollbackSnapshot& snap);
 

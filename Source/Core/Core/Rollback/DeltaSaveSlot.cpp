@@ -127,7 +127,7 @@ void DeltaSaveSlot::Reset()
   m_save_buffer.reset();
 }
 
-static void CaptureRegionDelta(RegionDelta& out, JITDirtyBitmap& dirty,
+static void CaptureRegionDelta(RegionDelta& out, const JITDirtyBitmap& dirty,
                                 uint32_t first_page, uint32_t page_count,
                                 const uint8_t* region_base)
 {
@@ -147,13 +147,10 @@ static void CaptureRegionDelta(RegionDelta& out, JITDirtyBitmap& dirty,
       continue;
 
     out.page_indices[written] = static_cast<uint16_t>(i);
-    std::memcpy(out.page_data.data() + static_cast<size_t>(written) * PAGE_SIZE,
-                region_base          + static_cast<size_t>(i)        * PAGE_SIZE,
-                PAGE_SIZE);
+      std::memcpy(out.page_data.data() + static_cast<size_t>(written) * PAGE_SIZE,
+                  region_base + static_cast<size_t>(i) * PAGE_SIZE, PAGE_SIZE);
     ++written;
   }
-  // no longer dirty now that all page data has been captured
-  dirty.ClearRange(first_page, page_count);
 }
 
 // region_phys_base: Wii physical base of the region
@@ -176,29 +173,47 @@ void DeltaSaveSlot::Save(Core::System& system)
 {
   ROLLBACK_ZONE();
   ASSERT(m_mem1_ptr);
+  ASSERT(m_mem1_page_count < MEM2_FIRST_PAGE);
   auto& bitmap = JITDirtyBitmap::Get();
   auto& rbm = RollbackManager::Get();
-  {
+  // set up the group, so each CaptureRegionDelta can dispatch into this group and we can wait for them all at the end
+  rbm.m_rollback_jobs_context.group = jobs::jobgroup::create();
+
+  // NOTE: there is still likely savings to be had here.
+  // Going *too* parallel seems to stress out the job system im using here (it's not using a real internal work stealing algo, so there's room for improvement there)
+  // but even when i tested splitting every page copy into it's own job, i think the overhead of that was more from cache thrashing
+  // than job overhead? Not totally sure.
+  // 
+  auto mem1_job = [this, bitmap]() {
     ROLLBACK_ZONE_N("mem1 save");
     CaptureRegionDelta(m_mem1_delta, bitmap, 0, m_mem1_page_count, m_mem1_ptr);
-  }
-  {
-    ROLLBACK_ZONE_N("mem2 copy");
+  };
+  auto mem2_job = [this, bitmap]() {
+    ROLLBACK_ZONE_N("mem2 save");
     if (m_mem2_ptr && m_mem2_page_count > 0)
       CaptureRegionDelta(m_mem2_delta, bitmap, MEM2_FIRST_PAGE, m_mem2_page_count, m_mem2_ptr);
-  }
-  {
-    ROLLBACK_ZONE_N("L1 cache copy");
+  };
+  auto l1_cache_job = [this]() {
+    ROLLBACK_ZONE_N("L1 cache save");
     // L1 cache is outside JIT fastmem arena, not tracked by dirty bitmap
     if (m_l1_cache_ptr && m_l1_cache_size > 0 && m_l1_cache_snapshot.data())
       std::memcpy(m_l1_cache_snapshot.data(), m_l1_cache_ptr, m_l1_cache_size);
-  }
+  };
+  rbm.m_job_runtime.dispatch(mem1_job, rbm.m_rollback_jobs_context);
+  rbm.m_job_runtime.dispatch(mem2_job, rbm.m_rollback_jobs_context);
+  rbm.m_job_runtime.dispatch(l1_cache_job, rbm.m_rollback_jobs_context);
   {
     ROLLBACK_ZONE_N("DoState save");
     rbm.BeginDoState();
     State::SaveToBuffer(system, m_save_buffer);
     rbm.EndDoState();
   }
+
+  rbm.m_rollback_jobs_context.group->join();
+  rbm.m_rollback_jobs_context.group = nullptr;
+  // no longer dirty now that all page data has been captured
+  bitmap.ClearRange(0, m_mem1_page_count);
+  bitmap.ClearRange(MEM2_FIRST_PAGE, m_mem2_page_count);
   m_has_state = true;
 }
 

@@ -249,7 +249,6 @@ void RollbackManager::Init(Core::System& system)
   m_rollback_jobs_context = {
     .name = "Rollback Jobs",
     .pool = m_job_runtime.get_pool("Rollback Job Pool", ROLLBACK_NUM_HELPER_THREADS),
-    .group = jobs::jobgroup::create(),
     .can_cancel = false,
   };
 
