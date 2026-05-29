@@ -510,10 +510,14 @@ void RollbackManager::LoadFrame(Core::System& system, int frames_back)
     Rollback::DeltaSaveSlot& delta = m_slots[slot];
     {
       ROLLBACK_ZONE_N("mem1 delta apply");
+      auto x = StringFromFormat("page count %u", delta.m_mem1_delta.page_count);
+      ZoneText(x.c_str(), x.size());
       RestoreRegionDelta(delta.m_mem1_delta, m_mem1_ptr, 0u, m_exclude_regions);
     }
     {
       ROLLBACK_ZONE_N("mem2 delta apply");
+      auto x = StringFromFormat("page count %u", delta.m_mem2_delta.page_count);
+      ZoneText(x.c_str(), x.size());
       if (m_mem2_ptr && delta.m_mem2_page_count > 0)
         RestoreRegionDelta(delta.m_mem2_delta, m_mem2_ptr, MEM2_BASE, m_exclude_regions);
     }

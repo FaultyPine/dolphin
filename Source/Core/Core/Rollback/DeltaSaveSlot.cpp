@@ -127,7 +127,7 @@ void DeltaSaveSlot::Reset()
   m_save_buffer.reset();
 }
 
-static void CaptureRegionDelta(RegionDelta& out, const JITDirtyBitmap& dirty,
+static uint32_t CaptureRegionDelta(RegionDelta& out, const JITDirtyBitmap& dirty,
                                 uint32_t first_page, uint32_t page_count,
                                 const uint8_t* region_base)
 {
@@ -151,6 +151,7 @@ static void CaptureRegionDelta(RegionDelta& out, const JITDirtyBitmap& dirty,
                   region_base + static_cast<size_t>(i) * PAGE_SIZE, PAGE_SIZE);
     ++written;
   }
+  return written;
 }
 
 // region_phys_base: Wii physical base of the region
@@ -181,8 +182,10 @@ static void mem1_save_fn(job::JobTaskThread&, job::Job& j)
 {
   auto* d = static_cast<SaveJobData*>(j.data);
   ROLLBACK_ZONE_N("mem1 save");
-  CaptureRegionDelta(d->slot->m_mem1_delta, *d->bitmap,
+  uint32_t written = CaptureRegionDelta(d->slot->m_mem1_delta, *d->bitmap,
                      0, d->slot->m_mem1_page_count, d->slot->m_mem1_ptr);
+  auto x = StringFromFormat("page count %u", written);
+  ZoneText(x.c_str(), x.size());
 }
 
 static void mem2_save_fn(job::JobTaskThread&, job::Job& j)
@@ -190,9 +193,12 @@ static void mem2_save_fn(job::JobTaskThread&, job::Job& j)
   auto* d = static_cast<SaveJobData*>(j.data);
   ROLLBACK_ZONE_N("mem2 save");
   if (d->slot->m_mem2_ptr && d->slot->m_mem2_page_count > 0)
-    CaptureRegionDelta(d->slot->m_mem2_delta, *d->bitmap,
-                       MEM2_FIRST_PAGE, d->slot->m_mem2_page_count,
-                       d->slot->m_mem2_ptr);
+  {
+    uint32_t written = CaptureRegionDelta(d->slot->m_mem2_delta, *d->bitmap, MEM2_FIRST_PAGE,
+                       d->slot->m_mem2_page_count, d->slot->m_mem2_ptr);
+    auto x = StringFromFormat("page count %u", written);
+    ZoneText(x.c_str(), x.size());
+  }
 }
 
 static void l1_save_fn(job::JobTaskThread&, job::Job& j)
