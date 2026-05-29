@@ -1011,7 +1011,10 @@ void CEXIBrawlback::DMAWrite(u32 address, u32 size)
     if (size <= 1)
         payload = nullptr;
 
-
+#ifdef HAVE_TRACY
+    static TracyCZoneCtx gameSimFrameTracyZone = {};
+    static TracyCZoneCtx fullFrameTracyZone = {};
+#endif
     static u64 frameTime = Common::Timer::NowUs();
     switch (command_byte)
     {
@@ -1043,19 +1046,44 @@ void CEXIBrawlback::DMAWrite(u32 address, u32 size)
         handleRegisterExcludeRegion(payload);
         break;
 
-    
     // just using these CMD's to track frame times lol
     case CMD_TIMER_START:
         {
             frameTime = Common::Timer::NowUs();
+#ifdef HAVE_TRACY
+            static const struct ___tracy_source_location_data s_frame_loc{
+                "BrawlbackFrame", __func__, __FILE__, (uint32_t)__LINE__, 0};
+            fullFrameTracyZone = ___tracy_emit_zone_begin(&s_frame_loc, 1);
+#endif
         }
         break;
     case CMD_TIMER_END:
         {
             u32 timeDiff = Common::Timer::NowUs() - frameTime;
             INFO_LOG_FMT(BRAWLBACK, "Game logic took {} ms\n", (double)(timeDiff / 1000.0));
+#ifdef HAVE_TRACY
+            TracyCZoneEnd(fullFrameTracyZone);
+            TracyCFrameMark;
+#endif
         }
         break;
+
+      case CMD_GAMESIM_UPDATE:
+      {
+#ifdef HAVE_TRACY
+        static const struct ___tracy_source_location_data s_frame_loc{
+            "GameSimFrame", __func__, __FILE__, (uint32_t)__LINE__, 0};
+        gameSimFrameTracyZone = ___tracy_emit_zone_begin(&s_frame_loc, 1);
+#endif
+      }
+      break;
+      case CMD_GAMESIM_UPDATE_END:
+      {
+#ifdef HAVE_TRACY
+        TracyCZoneEnd(gameSimFrameTracyZone);
+#endif
+      }
+      break;
     
 
     default:

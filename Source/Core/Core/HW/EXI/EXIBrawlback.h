@@ -10,6 +10,10 @@
 #include "Core/Brawlback/Netplay/Matchmaking.h"
 #include "Core/Brawlback/TimeSync.h"
 
+#ifdef HAVE_TRACY
+#include <tracy/TracyC.h>
+#endif
+
 using namespace Brawlback;
 
 class CEXIBrawlback : public ExpansionInterface::IEXIDevice

@@ -17,7 +17,7 @@
 #include "Savestate.h"
 
 // make sure this is the same as the one in Brawlback.h on the game side
-#define MAX_ROLLBACK_FRAMES 6
+#define MAX_ROLLBACK_FRAMES 7
 
 #define FRAME_DELAY 2
 static_assert(FRAME_DELAY >= 1);
@@ -99,11 +99,13 @@ namespace Brawlback {
 
       CMD_TIMER_START = 7,
       CMD_TIMER_END = 8,
-      CMD_UPDATE = 9,
+      CMD_GAMESIM_UPDATE = 9,
       
       CMD_GET_ONLINE_STATUS = 10,
       CMD_CLEANUP_CONNECTION = 11,
       CMD_GET_NEW_SEED = 12,
+
+      CMD_GAMESIM_UPDATE_END = 19,
     };
 
     enum NetPacketCommand : u8 
