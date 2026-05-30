@@ -25,7 +25,7 @@ namespace Rollback
 // MEM2 physical base is 0x10000000, so the byte offset within MEM2 is 0x001812b4.
 static constexpr uint32_t BRAWL_FRAME_COUNTER_MEM2_OFFSET = 0x001812b4u;
 
-static uint32_t ReadBrawlFrameCounter(const uint8_t* mem2_ptr, size_t mem2_size)
+uint32_t ReadBrawlFrameCounter(const uint8_t* mem2_ptr, size_t mem2_size)
 {
   if (!mem2_ptr || BRAWL_FRAME_COUNTER_MEM2_OFFSET + 4 > mem2_size)
     return 0;
@@ -116,7 +116,7 @@ void RollbackManager::CompareValSnapshot(int target_slot, int frames_back,
       const size_t offset = static_cast<size_t>(page) * PAGE_SIZE;
       if (std::memcmp(m_mem2_ptr + offset, snap.mem2.get() + offset, PAGE_SIZE) != 0)
       {
-        const bool in_delta = target_pages.test(DeltaSaveSlot::MEM2_FIRST_PAGE + page);
+        const bool in_delta = target_pages.test(MEM2_FIRST_PAGE + page);
         if (in_delta) ++mem2_mismatch_delta; else ++mem2_mismatch_gap;
         if (mem2_mismatch < MAX_LOG_PAGES)
         {
@@ -503,10 +503,14 @@ void RollbackManager::LoadFrame(Core::System& system, int frames_back)
   m_slots[target_slot].MarkTouchedGlobalPages(target_pages);
 
   // Apply deltas newest-to-oldest so pages in multiple slots end up at their target values.
+
+  INFO_LOG_FMT(BRAWLBACK, "most_recent = {} (frame={}), target_slot = {} (frame={})", most_recent,
+               m_slots[most_recent].brawl_frame, target_slot, m_slots[target_slot].brawl_frame);
   for (int step = 1; step <= frames_back; ++step)
   {
     const int slot = Wrap(most_recent - step, NUM_SAVE_SLOTS);
     Rollback::DeltaSaveSlot& delta = m_slots[slot];
+    INFO_LOG_FMT(BRAWLBACK, "restoring delta from slot {}, slot brawlframe = {}", slot, delta.brawl_frame);
     {
       ROLLBACK_ZONE_N("mem1 delta apply");
       auto x = StringFromFormat("page count %u", delta.m_mem1_delta.page_count);
@@ -528,32 +532,32 @@ void RollbackManager::LoadFrame(Core::System& system, int frames_back)
     int numPagesToRestore = 0;
     std::shared_lock lk(m_base_snapshot.mutex);
     if (m_base_snapshot.valid)
-    {
+  {
       const uint32_t mem1_pages = static_cast<uint32_t>(m_mem1_size / PAGE_SIZE);
       for (uint32_t p = 0; p < mem1_pages; ++p)
-      {
+    {
         if (!target_pages.test(p))
-        {
+      {
           savestateMemcpy(m_mem1_ptr + p * PAGE_SIZE,
                           m_base_snapshot.mem1.get() + p * PAGE_SIZE,
-                          PAGE_SIZE,
+                        PAGE_SIZE,
                           p * static_cast<uint32_t>(PAGE_SIZE),
-                          m_exclude_regions);
+                        m_exclude_regions);
           numPagesToRestore++;
-        }
       }
+    }
       if (m_mem2_ptr && m_base_snapshot.mem2)
-      {
+    {
         const uint32_t mem2_pages = static_cast<uint32_t>(m_mem2_size / PAGE_SIZE);
         for (uint32_t p = 0; p < mem2_pages; ++p)
-        {
+      {
           if (!target_pages.test(MEM2_FIRST_PAGE + p))
-          {
+        {
             savestateMemcpy(m_mem2_ptr + p * PAGE_SIZE,
                             m_base_snapshot.mem2.get() + p * PAGE_SIZE,
-                            PAGE_SIZE,
+                          PAGE_SIZE,
                             0x10000000u + p * static_cast<uint32_t>(PAGE_SIZE),
-                            m_exclude_regions);
+                          m_exclude_regions);
             numPagesToRestore++;
           }
         }
@@ -596,6 +600,7 @@ void RollbackManager::LoadFrame(Core::System& system, int frames_back)
   // so the next save will overwrite the next slot.
   m_ring_next  = Wrap(target_slot + 1, NUM_SAVE_SLOTS);
   m_ring_count = m_ring_count - frames_back;
+  INFO_LOG_FMT(BRAWLBACK, "after load, m_ring_next = {}, m_ring_count = {}", m_ring_next, m_ring_count);
 
   if (ok)
   {

@@ -231,6 +231,7 @@ void DeltaSaveSlot::Save(Core::System& system)
   ASSERT(m_mem1_ptr);
   ASSERT(m_mem1_page_count < MEM2_FIRST_PAGE);
 
+  brawl_frame = ReadBrawlFrameCounter(m_mem2_ptr, m_mem2_size);
   auto& bitmap = JITDirtyBitmap::Get();
   auto& rbm    = RollbackManager::Get();
   auto* dt     = rbm.m_dispatch_thread;

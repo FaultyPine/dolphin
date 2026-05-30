@@ -114,4 +114,6 @@ private:
 #endif
 };
 
+uint32_t ReadBrawlFrameCounter(const uint8_t* mem2_ptr, size_t mem2_size);
+
 }  // namespace Rollback

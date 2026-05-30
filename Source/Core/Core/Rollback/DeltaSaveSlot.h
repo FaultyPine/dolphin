@@ -111,6 +111,8 @@ public:
   RegionDelta m_mem1_delta;
   RegionDelta m_mem2_delta;
 
+  uint32_t brawl_frame = 0;
+
   Common::UniqueBuffer<uint8_t> m_l1_cache_snapshot;  // outside fastmem arena, not bitmap-tracked
   Common::UniqueBuffer<uint8_t> m_save_buffer;         // non-RAM state (CPU, HW, IOS, etc.)
 
