@@ -2,22 +2,24 @@
 ## SAVESTATES:
 
 
-- optimize! Low stress - low hanging fruit optimization, now that it's proven that they are fast enough.
-Loading:
- crunch down all the deltas to remove "duplicates" - i.e. if frame 0 and frame 1 both touched
-     page X, only the oldest delta (frame 0) needs to be applied to restore the target frame;
-     applying frame 1's delta would just write the same data back into page X and waste time.
- overlap the applydeltas work with gappagerestore work
-RestoreNonDeltaState can also probably be overlapped with the above memcpy work?
-
-loadstate algo:
-for all pages that were written to within [target frame, current frame] rollback window (iterating from current -> target)
-  find the "source data" slot that gives us the correct "version" of that page on "target frame"
-    How to do that: find the oldest save slot BEFORE the slot this page was written, we can use that slot's page as the "source"
-                    if there is no older slot, we use the base snapshot
-this returns a mapping (page index, savestate slot that contains the "correct data" for target frame)
-We then apply that mapping - copying the savestate slot with "correct data" for the given page index into game ram
-
+loadstate algo: ~~done~~
+(target frame = the frame we want to rollback to)
+Scan forward from target to current, collecting every page that was dirtied anywhere in that range.
+For each unique dirty page, search backward from target toward the oldest slot to find the most recent
+saved state at or before the target frame - that slot has the correct data for that page at the target frame.
+If no save slot has it, use the base snapshot (a full RAM image kept current by absorbing evicted slots).
+Then copy all those pages into game RAM.
+Here's an ai ascii visual of this process:
+```
+  base       |<- pre-window ->|<------------- rollback window ------------->|
+  snapshot   [slot] ...[slot]  [TARGET] [slot] [slot] ... [slot] [CURRENT]
+                  |                |                                    |
+                  |                +------ scan forward for dirty pages-+-->    <- takes the "first" (oldest dirty page) it finds, newer ones are ignored
+                  |                |
+                  +<--- search backward for each page's source ---------+       <- stops on first hit ("most recent at or before target frame")
+                  |
+           first hit = source   (no hit = use base snapshot)
+```
 
 
 ## GAME SIM

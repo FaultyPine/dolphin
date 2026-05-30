@@ -532,6 +532,7 @@ void RollbackManager::LoadFrame(Core::System& system, int frames_back)
     Rollback::DeltaSaveSlot& deltaslot = m_slots[slot];
     ASSERT(deltaslot.HasState());
     INFO_LOG_FMT(BRAWLBACK, "indexing savestate slot {} (frame={})", slot, deltaslot.brawl_frame);
+    // TODO: these two could be parallelized
     for (u32 i = 0; i < deltaslot.m_mem1_delta.page_count; i++)
       getSourceDataForPage(deltaslot.m_mem1_delta.page_indices[i], 0);
     for (u32 i = 0; i < deltaslot.m_mem2_delta.page_count; i++)
