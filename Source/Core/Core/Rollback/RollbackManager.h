@@ -72,7 +72,6 @@ public:
   job::JobTaskThread*  m_dispatch_thread = nullptr;
   std::vector<std::thread> m_worker_threads;
 
-private:
   bool m_initialized = false;
 
   uint8_t* m_mem1_ptr  = nullptr;
@@ -108,8 +107,7 @@ private:
 #if ROLLBACK_VALIDATE
   RollbackSnapshot m_val_snapshots[NUM_SAVE_SLOTS];
 
-  void CompareValSnapshot(int target_slot, int frames_back,
-                          const std::bitset<JITDirtyBitmap::ENTRY_COUNT>& target_pages) const;
+  void CompareValSnapshot(int target_slot, int frames_back) const;
   void InvalidateValSnapshots();
 #endif
 };
