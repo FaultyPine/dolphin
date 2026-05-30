@@ -99,15 +99,6 @@ private:
     std::optional<Match::PlayerFrameData> HandleInputPrediction(u32 frame, u8 playerIdx);
     int latestConfirmedFrame = 0;
     // -------------------------------
-
-
-
-    // --- Savestates
-    // The RollbackManager delta ring-buffer handles save/load.
-    // We only track which game frame was most recently captured so we can
-    // compute `frames_back` when the game requests a rollback load.
-    int m_lastCapturedFrame = -1;
-    // -------------------------------
     
 
     // --- Framedata (player inputs)

@@ -101,12 +101,10 @@ void CEXIBrawlback::handleCaptureSavestate(u8* data)
         // Re-init the ring buffer at game start so stale slots from any previous
         // session never leak into this game's rollback window.
         rbMgr.Init(m_system);
-        m_lastCapturedFrame = -1;
         INFO_LOG_FMT(BRAWLBACK, "RollbackManager re-initialized for new game\n");
     }
 
     rbMgr.SaveFrame(m_system);
-    m_lastCapturedFrame = (int)frame;
 
     u32 timeDiff = (u32)(Common::Timer::NowUs() - startTime);
     INFO_LOG_FMT(BRAWLBACK, "Captured savestate for frame {} in: {} ms", frame, ((double)timeDiff) / 1000);
@@ -115,21 +113,20 @@ void CEXIBrawlback::handleCaptureSavestate(u8* data)
 void CEXIBrawlback::handleLoadSavestate(u8* data)
 {
     Match::RollbackInfo* loadStateRollbackInfo = (Match::RollbackInfo*)data;
-    // The frame we should restore is the one we first began not receiving inputs.
-    s32 frame = (s32)SlippiUtility::Mem::readWord((u8*)&loadStateRollbackInfo->beginFrame);
+    // beginFrame = target frame to restore; endFrame = frame most recently saved.
+    const s32 beginFrame = (s32)SlippiUtility::Mem::readWord((u8*)&loadStateRollbackInfo->beginFrame);
+    const s32 endFrame   = (s32)SlippiUtility::Mem::readWord((u8*)&loadStateRollbackInfo->endFrame);
 
     auto& rbMgr = Rollback::RollbackManager::Get();
 
-    // `frames_back` = how many SaveFrame calls separate `frame` from the most-recently
-    // captured slot.  Must be in [1, MAX_ROLLBACK_FRAMES].
-    const int frames_back = m_lastCapturedFrame - (int)frame;
+    const int frames_back = endFrame - beginFrame;
 
     if (!rbMgr.IsInitialized() || frames_back < 1 || frames_back > MAX_ROLLBACK_FRAMES)
     {
         ERROR_LOG_FMT(BRAWLBACK,
-                      "Cannot load savestate for frame {} (lastCaptured={}, frames_back={}).",
-                      frame, m_lastCapturedFrame, frames_back);
-        PanicAlertFmtT("Savestate for frame {0} does not exist.", frame);
+                      "Cannot load savestate for frame {} (endFrame={}, frames_back={}).",
+                      beginFrame, endFrame, frames_back);
+        PanicAlertFmtT("Savestate for frame {0} does not exist.", beginFrame);
         this->isConnected = false;
         if (this->server)
         {
@@ -141,12 +138,10 @@ void CEXIBrawlback::handleLoadSavestate(u8* data)
 
     u64 startTime = Common::Timer::NowUs();
     rbMgr.LoadFrame(m_system, frames_back);
-    // After the load the ring is rewound; our "last captured" frame is now `frame`.
-    m_lastCapturedFrame = (int)frame;
 
     u32 timeDiff = (u32)(Common::Timer::NowUs() - startTime);
     ERROR_LOG_FMT(BRAWLBACK, "Loaded savestate for frame {} (frames_back={}) in: {} ms",
-                  frame, frames_back, ((double)timeDiff) / 1000);
+                  beginFrame, frames_back, ((double)timeDiff) / 1000);
 }
 
 template <typename T>

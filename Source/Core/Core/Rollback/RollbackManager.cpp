@@ -393,7 +393,7 @@ void RollbackManager::SaveFrame(Core::System& system)
   const int slot = m_ring_next;
 
   // Evict the oldest slot, async apply its deltas to the base snapshot
-  if (m_ring_count == NUM_SAVE_SLOTS)
+  if (m_ring_count >= NUM_SAVE_SLOTS)
   {
     // Wait for any in-flight eviction — typically completes within the same frame.
     if (m_eviction_future.valid()) m_eviction_future.wait();
@@ -448,8 +448,7 @@ void RollbackManager::LoadFrame(Core::System& system, int frames_back)
         fmt::format("Cannot rollback (only {} frame(s) saved)", m_ring_count), 2000);
     return;
   }
-
-  frames_back = std::clamp(frames_back, 1, m_ring_count - 1);
+  ASSERT(frames_back >= 1 && frames_back < m_ring_count && frames_back <= MAX_ROLLBACK_FRAMES);
 
   {
     ROLLBACK_ZONE_N("Preserve stack");
