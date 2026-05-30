@@ -137,9 +137,13 @@ static uint32_t CaptureRegionDelta(RegionDelta& out, const JITDirtyBitmap& dirty
     if (entries[first_page + i]) ++dirty_count;
 
   out.page_count = dirty_count;
-  out.page_indices.reset(dirty_count);
-  out.page_data.reset(static_cast<size_t>(dirty_count) * PAGE_SIZE);
+  {
+    ROLLBACK_ZONE_N("delta buffer alloc");
+    out.page_indices.reset(dirty_count);
+    out.page_data.reset(static_cast<size_t>(dirty_count) * PAGE_SIZE);
+  }
 
+  ROLLBACK_ZONE_N("delta buffer copies");
   uint32_t written = 0;
   for (uint32_t i = 0; i < page_count; ++i)
   {
@@ -170,59 +174,87 @@ void RestoreRegionDelta(const RegionDelta& delta, uint8_t* region_base,
   }
 }
 
-// Job data shared across the three parallel page-capture tasks.
-// Stack-allocated in Save() — safe because the wait loop blocks until all done.
-struct SaveJobData
+void CaptureRegionDeltaInSections(Rollback::RegionDelta& out, JITDirtyBitmap& dirty, u32 first_page, u32 page_count,
+ const uint8_t* region_base)
 {
-  DeltaSaveSlot*        slot;
-  const JITDirtyBitmap* bitmap;
-};
+  uint32_t written = 0;
+  const uint8_t* entries = dirty.entries;
 
-static void mem1_save_fn(job::JobTaskThread&, job::Job& j)
-{
-  auto* d = static_cast<SaveJobData*>(j.data);
-  ROLLBACK_ZONE_N("mem1 save");
-  uint32_t written = CaptureRegionDelta(d->slot->m_mem1_delta, *d->bitmap,
-                     0, d->slot->m_mem1_page_count, d->slot->m_mem1_ptr);
-  auto x = StringFromFormat("page count %u", written);
-  ZoneText(x.c_str(), x.size());
-}
-
-static void mem2_save_fn(job::JobTaskThread&, job::Job& j)
-{
-  auto* d = static_cast<SaveJobData*>(j.data);
-  ROLLBACK_ZONE_N("mem2 save");
-  if (d->slot->m_mem2_ptr && d->slot->m_mem2_page_count > 0)
+  std::vector<u32> dirty_pages;
   {
-    uint32_t written = CaptureRegionDelta(d->slot->m_mem2_delta, *d->bitmap, MEM2_FIRST_PAGE,
-                       d->slot->m_mem2_page_count, d->slot->m_mem2_ptr);
-    auto x = StringFromFormat("page count %u", written);
+    ROLLBACK_ZONE_N("dirty page population");
+    dirty_pages.reserve(page_count);
+    for (uint32_t i = 0; i < page_count; ++i)
+    {
+      if (entries[first_page + i])
+      {
+        dirty_pages.push_back(i + first_page);
+      }
+    }
+  }
+
+  u32 num_dirty = static_cast<u32>(dirty_pages.size());
+  out.page_count = num_dirty;
+  {
+    ROLLBACK_ZONE_N("delta buffer alloc");
+    if (out.page_indices.size() < num_dirty)
+      out.page_indices.reset(num_dirty);
+    if (out.page_data.size() < (num_dirty * PAGE_SIZE))
+      out.page_data.reset(num_dirty * PAGE_SIZE);
+  }
+
+  auto func = [&](u32 offset, u32 size) -> u32 {
+    ROLLBACK_ZONE_N("split mem1 save");
+    u32 this_split_written = 0;
+    for (uint32_t i = offset; i < offset + size; ++i)
+    {
+      if (i >= dirty_pages.size())
+        continue;
+      u32 pageidx = dirty_pages[i];
+      if (!entries[pageidx])
+        continue;
+
+      out.page_indices[written + this_split_written] = static_cast<uint16_t>(pageidx);
+      std::memcpy(out.page_data.data() +
+                      static_cast<size_t>(written + this_split_written) * PAGE_SIZE,
+                  region_base + static_cast<size_t>(pageidx) * PAGE_SIZE, PAGE_SIZE);
+      ++this_split_written;
+    }
+    auto x = StringFromFormat("page count %u (offset %u size %u)", this_split_written, offset, size);
     ZoneText(x.c_str(), x.size());
+    return this_split_written;
+  };
+  u32 num_splits = 4;
+  u32 split_size = (num_dirty + num_splits - 1) / num_splits;
+  std::vector<job::Job*> jobs(num_splits);
+  for (u32 i = 0; i < num_splits; ++i)
+  {
+    u32 offset = i * split_size;
+    u32 size = std::min(split_size, num_dirty);
+    written += func(offset, size);
   }
 }
 
-static void l1_save_fn(job::JobTaskThread&, job::Job& j)
+static job::Job* KickRootJob(job::JobTaskThread* dt, job::JobFunction fn)
 {
-  auto* d = static_cast<SaveJobData*>(j.data);
-  ROLLBACK_ZONE_N("L1 cache save");
-  if (d->slot->m_l1_cache_ptr && d->slot->m_l1_cache_size > 0 &&
-      d->slot->m_l1_cache_snapshot.data())
-    std::memcpy(d->slot->m_l1_cache_snapshot.data(),
-                d->slot->m_l1_cache_ptr, d->slot->m_l1_cache_size);
+  job::Job* root = dt->create_job(fn);
+  root->is_waiting = true;
+  root->kick();
+  return root;
 }
 
-// Root job: spawns mem1/mem2/l1 as children of itself.
-// Mirrors slower_start_jobs from the WSQ test suite — children are created
-// inside the root's execution so the parent-child tracking is set up correctly.
-static void root_save_fn(job::JobTaskThread& w, job::Job& root)
+// Helper: Drain remaining jobs until the root job and all children are complete.
+static void DrainJobsUntilComplete(job::JobTaskThread* dt, job::Job* root)
 {
-  auto* d = static_cast<SaveJobData*>(root.data);
-  ROLLBACK_ZONE_N("root save dispatch");
-  job::Job* jar[3];
-  jar[0] = w.create_job_as_child(root, mem1_save_fn, d);
-  jar[1] = w.create_job_as_child(root, mem2_save_fn, d);
-  jar[2] = w.create_job_as_child(root, l1_save_fn,   d);
-  w.do_work_and_kick_jobs(jar, 3);
+  while (root->unfinished_jobs.load(std::memory_order_relaxed) != 0)
+  {
+    job::Job* k = dt->get_valid_job();
+    if (k != nullptr)
+      dt->execute(*k);
+    else
+      job::pause_thread();
+  }
+  root->alloc_block.deref();
 }
 
 void DeltaSaveSlot::Save(Core::System& system)
@@ -237,14 +269,40 @@ void DeltaSaveSlot::Save(Core::System& system)
   auto* dt     = rbm.m_dispatch_thread;
   ASSERT(dt);
 
-  SaveJobData data{this, &bitmap};
-
   // Kick root into the queue so workers can steal it immediately.
-  // is_waiting=true prevents finish() from auto-releasing the alloc block;
-  // we release it manually after the wait loop.
-  job::Job* root = dt->create_job(root_save_fn, &data);
-  root->is_waiting = true;
-  root->kick();
+  job::Job* root = KickRootJob(dt, [this, &bitmap](job::JobTaskThread& w, job::Job& root) {
+      ROLLBACK_ZONE_N("root save dispatch");
+      job::Job* jar[3];
+      jar[0] = w.create_job_as_child(root, [this, &bitmap](job::JobTaskThread&, job::Job&) {
+        ROLLBACK_ZONE_N("mem1 save");
+        Rollback::DeltaSaveSlot* slot = this;
+        #if 0
+        CaptureRegionDelta(slot->m_mem1_delta, bitmap, 0, slot->m_mem1_page_count,
+                                     slot->m_mem1_ptr);
+        #else
+        CaptureRegionDeltaInSections(slot->m_mem1_delta, bitmap, 0, slot->m_mem1_page_count,
+                                     slot->m_mem1_ptr);
+        #endif
+      });
+      jar[1] = w.create_job_as_child(root, [this, &bitmap](job::JobTaskThread&, job::Job&) {
+        ROLLBACK_ZONE_N("mem2 save");
+        Rollback::DeltaSaveSlot* slot = this;
+        if (slot->m_mem2_ptr && slot->m_mem2_page_count > 0)
+        {
+          uint32_t written = CaptureRegionDelta(slot->m_mem2_delta, bitmap, MEM2_FIRST_PAGE,
+                                                slot->m_mem2_page_count, slot->m_mem2_ptr);
+          auto x = StringFromFormat("page count %u", written);
+          ZoneText(x.c_str(), x.size());
+        }
+      });
+    jar[2] = w.create_job_as_child(root, [this](job::JobTaskThread&, job::Job&) {
+      ROLLBACK_ZONE_N("L1 cache save");
+      Rollback::DeltaSaveSlot* slot = this;
+      if (slot->m_l1_cache_ptr && slot->m_l1_cache_size > 0 && slot->m_l1_cache_snapshot.data())
+        std::memcpy(slot->m_l1_cache_snapshot.data(), slot->m_l1_cache_ptr, slot->m_l1_cache_size);
+    });
+    w.do_work_and_kick_jobs(jar, 3);
+  });
 
   // Run DoState on this thread while workers capture pages.
   {
@@ -254,16 +312,7 @@ void DeltaSaveSlot::Save(Core::System& system)
     rbm.EndDoState();
   }
 
-  // Help drain remaining jobs until root and all its children are done.
-  while (root->unfinished_jobs.load(std::memory_order_relaxed) != 0)
-  {
-    job::Job* k = dt->get_valid_job();
-    if (k != nullptr)
-      dt->execute(*k);
-    else
-      job::pause_thread();
-  }
-  root->alloc_block.deref();
+  DrainJobsUntilComplete(dt, root);
 
   bitmap.ClearRange(0, m_mem1_page_count);
   bitmap.ClearRange(MEM2_FIRST_PAGE, m_mem2_page_count);

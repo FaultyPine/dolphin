@@ -6,6 +6,7 @@
 #include <cstring>
 #include <cassert>
 #include <iostream>
+#include <functional>
 
 /* this algo is derived from: https://github.com/cdwfs/cds_job */
 /* sourced from: https://github.com/injinj/WSQ */
@@ -73,7 +74,7 @@ struct XoroRand {
 
 struct Job;
 struct JobTaskThread;
-typedef void (*JobFunction)( JobTaskThread &thr,  Job &job );
+typedef std::function<void(JobTaskThread&, Job&)> JobFunction;
 
 /* the work stealing queue */
 /* the owner of the queue pushes at the bottom and consumes there as well
