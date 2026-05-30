@@ -1080,7 +1080,10 @@ void CEXIBrawlback::DMAWrite(u32 address, u32 size)
         TracyCZoneEnd(gameSimFrameTracyZone);
 #endif
         u32 timeDiff = Common::Timer::NowUs() - frameSimTime;
-        INFO_LOG_FMT(BRAWLBACK, "Game simulation took {} ms\n", (double)(timeDiff / 1000.0));
+        if (Rollback::RollbackManager::Get().m_base_snapshot.valid)
+        {
+          INFO_LOG_FMT(BRAWLBACK, "Game simulation took {} ms\n", (double)(timeDiff / 1000.0));
+        }
       }
       break;
     
