@@ -127,37 +127,6 @@ void DeltaSaveSlot::Reset()
   m_save_buffer.reset();
 }
 
-uint32_t CaptureRegionDelta(RegionDelta& out, const JITDirtyBitmap& dirty,
-                                uint32_t first_page, uint32_t page_count,
-                                const uint8_t* region_base)
-{
-  const uint8_t* entries = dirty.entries;
-  uint32_t dirty_count = 0;
-  for (uint32_t i = 0; i < page_count; ++i)
-    if (entries[first_page + i]) ++dirty_count;
-
-  out.page_count = dirty_count;
-  {
-    ROLLBACK_ZONE_N("delta buffer alloc");
-    out.page_indices.reset(dirty_count);
-    out.page_data.reset(static_cast<size_t>(dirty_count) * PAGE_SIZE);
-  }
-
-  ROLLBACK_ZONE_N("delta buffer copies");
-  uint32_t written = 0;
-  for (uint32_t i = 0; i < page_count; ++i)
-  {
-    if (!entries[first_page + i])
-      continue;
-
-    out.page_indices[written] = static_cast<uint16_t>(i);
-      std::memcpy(out.page_data.data() + static_cast<size_t>(written) * PAGE_SIZE,
-                  region_base + static_cast<size_t>(i) * PAGE_SIZE, PAGE_SIZE);
-    ++written;
-  }
-  return written;
-}
-
 // region_phys_base: Wii physical base of the region
 //   MEM1 -> 0,          MEM2 -> 0x10000000
 void RestoreRegionDelta(const RegionDelta& delta, uint8_t* region_base,
