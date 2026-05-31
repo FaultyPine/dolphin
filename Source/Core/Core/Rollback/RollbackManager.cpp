@@ -379,6 +379,7 @@ void RollbackManager::SaveFrame(Core::System& system)
   // Evict the oldest slot, async apply its deltas to the base snapshot
   if (m_ring_count >= NUM_SAVE_SLOTS)
   {
+    ROLLBACK_ZONE_N("Prep eviction");
     // Wait for any in-flight eviction — typically completes within the same frame.
     if (m_eviction_future.valid()) m_eviction_future.wait();
     auto evicted = std::make_shared<Rollback::EvictedDelta>(m_slots[slot].ExtractDeltas());

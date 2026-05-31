@@ -570,4 +570,28 @@ Job::finish( void ) {
     this->alloc_block.deref();
 }
 
+
+static inline job::Job* KickRootJob(job::JobTaskThread* dt, job::JobFunction fn)
+{
+  job::Job* root = dt->create_job(fn);
+  root->is_waiting = true;
+  root->kick();
+  return root;
+}
+
+// Helper: Drain remaining jobs until the root job and all children are complete.
+static inline void DrainJobsUntilComplete(job::JobTaskThread* dt, job::Job* root)
+{
+  while (root->unfinished_jobs.load(std::memory_order_relaxed) != 0)
+  {
+    job::Job* k = dt->get_valid_job();
+    if (k != nullptr)
+      dt->execute(*k);
+    else
+      job::pause_thread();
+  }
+  root->alloc_block.deref();
+}
+
+
 } /* namespace job */
