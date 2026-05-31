@@ -176,7 +176,7 @@ void RestoreRegionDelta(const RegionDelta& delta, uint8_t* region_base,
 
 void enqueueSubsectionJobs(u32 first_page, u32 page_count, const uint8_t* region_base,
                            Rollback::RegionDelta& out, JITDirtyBitmap& bitmap,
-                           job::JobTaskThread& w, job::Job& root, std::vector<job::Job*>& jar)
+                           job::JobTaskThread& w, job::Job& root, std::vector<job::Job*>& jar, u32 num_work_chunks)
 {
   const uint8_t* entries = bitmap.entries;
   auto dirty_pages = std::make_shared<std::vector<u32>>();
@@ -209,7 +209,7 @@ void enqueueSubsectionJobs(u32 first_page, u32 page_count, const uint8_t* region
   uint8_t* page_data_ptr = out.page_data.data();
 
   auto copySubsectionFn = [dirty_pages, entries, region_base, page_indices_ptr, page_data_ptr, first_page](u32 offset, u32 size) {
-    ROLLBACK_ZONE_N("split save");
+    ROLLBACK_ZONE_N("copy dirty pages");
     if (offset >= dirty_pages->size())
       return;  // Nothing to do for this subsection
 
@@ -233,9 +233,8 @@ void enqueueSubsectionJobs(u32 first_page, u32 page_count, const uint8_t* region
     ZoneText(x.c_str(), x.size());
   };
 
-  u32 num_splits = 4;
-  u32 split_size = (num_dirty + num_splits - 1) / num_splits;
-  for (u32 i = 0; i < num_splits; ++i)
+  u32 split_size = (num_dirty + num_work_chunks - 1) / num_work_chunks;
+  for (u32 i = 0; i < num_work_chunks; ++i)
   {
     u32 offset = i * split_size;
     u32 size = std::min(split_size, num_dirty - offset);
@@ -258,7 +257,6 @@ void DeltaSaveSlot::Save(Core::System& system)
   auto& rbm    = RollbackManager::Get();
   auto* dt     = rbm.m_dispatch_thread;
   ASSERT(dt);
-
   
   job::Job* l1cachejob = job::KickRootJob(dt, [this](job::JobTaskThread&, job::Job&) {
     ROLLBACK_ZONE_N("L1 cache save");
@@ -267,10 +265,21 @@ void DeltaSaveSlot::Save(Core::System& system)
       std::memcpy(slot->m_l1_cache_snapshot.data(), slot->m_l1_cache_ptr, slot->m_l1_cache_size);
   });
 
-  job::Job* root = job::KickRootJob(dt, [this, &bitmap](job::JobTaskThread& w, job::Job& root) {
-    ROLLBACK_ZONE_N("root save dispatch");
+  job::Job* root_mem1_job = job::KickRootJob(dt, [this, &bitmap](job::JobTaskThread& w, job::Job& root) {
+    ROLLBACK_ZONE_N("root mem1 save dispatch");
     std::vector<job::Job*> jar;
-    enqueueSubsectionJobs(0, m_mem1_page_count, m_mem1_ptr, m_mem1_delta, bitmap, w, root, jar);
+    enqueueSubsectionJobs(0, m_mem1_page_count, m_mem1_ptr, m_mem1_delta, bitmap, w, root, jar, SAVESTATE_NUM_WORK_CHUNKS);
+    auto num_jobs = jar.size();
+    ASSERT(num_jobs <= UINT16_MAX);
+    w.do_work_and_kick_jobs(jar.data(), (uint16_t)num_jobs);
+  });
+
+  // do all mem1 copy jobs + l1 cache job. THEN do mem2 jobs.
+  // goal here is to try not to trash the cache too hard
+  job::Job* root_mem2_job = job::KickRootJob(dt, [this, &bitmap](job::JobTaskThread& w, job::Job& root) {
+    ROLLBACK_ZONE_N("root mem2 save dispatch");
+    std::vector<job::Job*> jar;
+    enqueueSubsectionJobs(MEM2_FIRST_PAGE, m_mem2_page_count, m_mem2_ptr, m_mem2_delta, bitmap, w, root, jar, SAVESTATE_NUM_WORK_CHUNKS);
     auto num_jobs = jar.size();
     ASSERT(num_jobs <= UINT16_MAX);
     w.do_work_and_kick_jobs(jar.data(), (uint16_t)num_jobs);
@@ -284,19 +293,8 @@ void DeltaSaveSlot::Save(Core::System& system)
     rbm.EndDoState();
   }
 
-  job::DrainJobsUntilComplete(dt, root);
-
-  // do all mem1 copy jobs + l1 cache job. THEN do mem2 jobs.
-  // goal here is to try not to trash the cache too hard
-  root = job::KickRootJob(dt, [this, &bitmap](job::JobTaskThread& w, job::Job& root) {
-    ROLLBACK_ZONE_N("root save dispatch");
-    std::vector<job::Job*> jar;
-    enqueueSubsectionJobs(MEM2_FIRST_PAGE, m_mem2_page_count, m_mem2_ptr, m_mem2_delta, bitmap, w, root, jar);
-    auto num_jobs = jar.size();
-    ASSERT(num_jobs <= UINT16_MAX);
-    w.do_work_and_kick_jobs(jar.data(), (uint16_t)num_jobs);
-  });
-  job::DrainJobsUntilComplete(dt, root);
+  job::DrainJobsUntilComplete(dt, root_mem1_job);
+  job::DrainJobsUntilComplete(dt, root_mem2_job);
   job::DrainJobsUntilComplete(dt, l1cachejob);
 
   bitmap.ClearRange(0, m_mem1_page_count);

@@ -26,7 +26,8 @@ class System;
 namespace Rollback
 {
 static constexpr int NUM_SAVE_SLOTS = MAX_ROLLBACK_FRAMES + 1;
-static constexpr int ROLLBACK_NUM_HELPER_THREADS = 4;
+static constexpr int ROLLBACK_NUM_HELPER_THREADS = 5+1; // plus one extra for eviction job
+static constexpr u32 SAVESTATE_NUM_WORK_CHUNKS = 5;
 class RollbackManager
 {
 public:
