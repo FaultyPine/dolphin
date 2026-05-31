@@ -262,6 +262,9 @@ void RollbackManager::Init(Core::System& system)
     m_slots[i].Init(m_mem1_ptr, m_mem1_size, m_mem2_ptr, m_mem2_size,
                     m_l1_cache_ptr, m_l1_cache_size);
 
+  m_needs_source_mem1.assign(m_mem1_size / PAGE_SIZE, 0);
+  m_needs_source_mem2.assign(m_mem2_size / PAGE_SIZE, 0);
+
   JITDirtyBitmap::Get().Clear();
 
   m_ring_next  = 0;
@@ -397,7 +400,6 @@ void RollbackManager::SaveFrame(Core::System& system)
     m_eviction_job = job::KickRootJob(m_dispatch_thread,
       [this, evicted](job::JobTaskThread&, job::Job&) mutable
       {
-        ROLLBACK_THREAD_NAME("Rollback Eviction");
         ROLLBACK_ZONE_N("BaseSnapshot::Evict");
         std::unique_lock lk(m_base_snapshot.mutex);
 
@@ -485,9 +487,12 @@ void RollbackManager::LoadFrame(Core::System& system, int frames_back)
 
   const int target_slot = Wrap(most_recent - frames_back, NUM_SAVE_SLOTS);
 
-  INFO_LOG_FMT(BRAWLBACK, "most_recent = {} (frame={}), target_slot = {} (frame={})", most_recent,
-               m_slots[most_recent].brawl_frame, target_slot, m_slots[target_slot].brawl_frame);
-
+  {
+    ROLLBACK_ZONE_N("log"); // this seems slow, adding a zone so i don't get confused
+    INFO_LOG_FMT(BRAWLBACK, "most_recent = {} (frame={}), target_slot = {} (frame={})", most_recent,
+                 m_slots[most_recent].brawl_frame, target_slot, m_slots[target_slot].brawl_frame);
+  }
+  
   constexpr u32 BASE_SNAPSHOT_SENTINEL = UINT32_MAX;
 
   struct SourceEntry
@@ -497,58 +502,83 @@ void RollbackManager::LoadFrame(Core::System& system, int frames_back)
     // position within delta.page_indices/page_data
     u32 local_idx;
   };
-  // global page index -> slot at or before target_slot that holds the frame-245 state
-  std::unordered_map<u32, SourceEntry> sourceDataToRestore;
 
   // oldest slot currently alive in the ring
   const int oldest_ring_slot = Wrap(m_ring_next - m_ring_count, NUM_SAVE_SLOTS);
 
-  // For each page dirty in [target_slot, most_recent], find the most recent slot at or
-  // before target_slot that captured it
-  auto getSourceDataForPage = [&](u32 local_idx, u32 firstpage) {
-    const bool is_mem2 = (firstpage != 0);
-    const u32 pageidx = local_idx + firstpage;
-    if (sourceDataToRestore.count(pageidx))
-      return;
+  static std::unordered_map<u32, SourceEntry> sourceDataToRestore;
 
-    bool found = false;
-    u32 found_local = 0;
-    int found_slot = -1;
+  // Walk [target_slot, most_recent], marking every dirtied page
+  u32 remaining = 0;
+  {
+    ROLLBACK_ZONE_N("ram page indexing - forward");
+    std::memset(m_needs_source_mem1.data(), 0, m_needs_source_mem1.size());
+    std::memset(m_needs_source_mem2.data(), 0, m_needs_source_mem2.size());
+
+    for (int n = 0; n <= frames_back; n++)
+    {
+      const int slot = Wrap(target_slot + n, NUM_SAVE_SLOTS);
+      const RegionDelta& d1 = m_slots[slot].m_mem1_delta;
+      for (u32 i = 0; i < d1.page_count; i++)
+      {
+        const u16 idx = d1.page_indices[i];
+        if (!m_needs_source_mem1[idx]) { m_needs_source_mem1[idx] = 1; remaining++; }
+      }
+      const RegionDelta& d2 = m_slots[slot].m_mem2_delta;
+      for (u32 i = 0; i < d2.page_count; i++)
+      {
+        const u16 idx = d2.page_indices[i];
+        if (!m_needs_source_mem2[idx]) { m_needs_source_mem2[idx] = 1; remaining++; }
+      }
+    }
+  }
+
+  // Walk from target_slot toward oldest. For each slot, satisfy any still-needed
+  // pages found there
+  {
+    ROLLBACK_ZONE_N("ram page indexing - backward");
+    sourceDataToRestore.clear();
+    sourceDataToRestore.reserve(remaining);
+
     for (int slot = target_slot; ; slot = Wrap(slot - 1, NUM_SAVE_SLOTS))
     {
-      Rollback::DeltaSaveSlot& deltaslot = m_slots[slot];
-      const Rollback::RegionDelta& sr = is_mem2 ? deltaslot.m_mem2_delta : deltaslot.m_mem1_delta;
-      for (u32 j = 0; j < sr.page_count; j++)
+      const RegionDelta& d1 = m_slots[slot].m_mem1_delta;
+      for (u32 i = 0; i < d1.page_count; i++)
       {
-        if (sr.page_indices[j] == local_idx)
+        const u16 idx = d1.page_indices[i];
+        if (m_needs_source_mem1[idx])
         {
-          found = true;
-          found_local = j;
-          found_slot = slot;
-          break;
+          m_needs_source_mem1[idx] = 0;
+          sourceDataToRestore[idx] = {static_cast<u32>(slot), i};
+          remaining--;
         }
       }
-      if (found || slot == oldest_ring_slot)
+      const RegionDelta& d2 = m_slots[slot].m_mem2_delta;
+      for (u32 i = 0; i < d2.page_count; i++)
+      {
+        const u16 idx = d2.page_indices[i];
+        if (m_needs_source_mem2[idx])
+        {
+          m_needs_source_mem2[idx] = 0;
+          sourceDataToRestore[MEM2_FIRST_PAGE + idx] = {static_cast<u32>(slot), i};
+          remaining--;
+        }
+      }
+      if (remaining == 0 || slot == oldest_ring_slot)
         break;
     }
-    sourceDataToRestore[pageidx] = found
-        ? SourceEntry{static_cast<u32>(found_slot), found_local}
-        : SourceEntry{BASE_SNAPSHOT_SENTINEL, 0};
-  };
 
-  // Walk target_slot through most_recent (inclusive) to collect every dirty page
-  for (int n = 0; n <= frames_back; n++)
-  {
-    ROLLBACK_ZONE_N("ram page indexing");
-    const int slot = Wrap(target_slot + n, NUM_SAVE_SLOTS);
-    Rollback::DeltaSaveSlot& deltaslot = m_slots[slot];
-    ASSERT(deltaslot.HasState());
-    INFO_LOG_FMT(BRAWLBACK, "indexing savestate slot {} (frame={})", slot, deltaslot.brawl_frame);
-    // TODO: these two could be parallelized
-    for (u32 i = 0; i < deltaslot.m_mem1_delta.page_count; i++)
-      getSourceDataForPage(deltaslot.m_mem1_delta.page_indices[i], 0);
-    for (u32 i = 0; i < deltaslot.m_mem2_delta.page_count; i++)
-      getSourceDataForPage(deltaslot.m_mem2_delta.page_indices[i], MEM2_FIRST_PAGE);
+    // Any pages still marked have no delta anywhere in the ring — use the base snapshot
+    for (u32 i = 0; i < static_cast<u32>(m_needs_source_mem1.size()); i++)
+    {
+      if (m_needs_source_mem1[i])
+        sourceDataToRestore[i] = {BASE_SNAPSHOT_SENTINEL, 0};
+    }
+    for (u32 i = 0; i < static_cast<u32>(m_needs_source_mem2.size()); i++)
+    {
+      if (m_needs_source_mem2[i])
+        sourceDataToRestore[MEM2_FIRST_PAGE + i] = {BASE_SNAPSHOT_SENTINEL, 0};
+    }
   }
 
   // TODO: this is uber parallelizable

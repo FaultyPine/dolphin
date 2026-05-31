@@ -102,6 +102,10 @@ public:
 
   job::Job* m_eviction_job = nullptr;
 
+  // one byte per page, 1 = needs a source, 0 = satisfied.
+  std::vector<u8> m_needs_source_mem1;
+  std::vector<u8> m_needs_source_mem2;
+
   void CaptureFullRamSnapshot(RollbackSnapshot& snap);
 
 #if ROLLBACK_VALIDATE
