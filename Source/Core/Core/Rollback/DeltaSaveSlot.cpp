@@ -207,10 +207,9 @@ void enqueueSubsectionJobs(u32 first_page, u32 page_count, const uint8_t* region
   {
     u32 offset = i * split_size;
     u32 size = std::min(split_size, num_dirty - offset);
-    jar.push_back(w.create_job_as_child(
-        root, [copySubsectionFn, offset, size](job::JobTaskThread& t, job::Job& j) {
-          copySubsectionFn(offset, size);
-        }));
+    jar.push_back(w.create_job_as_child(root, [copySubsectionFn, offset, size](job::JobTaskThread& t, job::Job& j) {
+      copySubsectionFn(offset, size);
+    }));
   }
 }
 
