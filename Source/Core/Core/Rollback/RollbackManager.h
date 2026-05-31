@@ -6,7 +6,6 @@
 #include <atomic>
 #include <bitset>
 #include <cstdint>
-#include <future>
 #include <memory>
 #include <shared_mutex>
 #include <thread>
@@ -100,7 +99,7 @@ public:
   // Rolling base: full MEM1+MEM2 state at the oldest reachable frame
   RollbackSnapshot m_base_snapshot;
 
-  std::future<void> m_eviction_future;
+  job::Job* m_eviction_job = nullptr;
 
   void CaptureFullRamSnapshot(RollbackSnapshot& snap);
 

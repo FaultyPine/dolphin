@@ -283,8 +283,11 @@ void RollbackManager::Shutdown()
   if (!m_initialized)
     return;
 
-  if (m_eviction_future.valid())
-    m_eviction_future.wait();
+  if (m_eviction_job)
+  {
+    job::DrainJobsUntilComplete(m_dispatch_thread, m_eviction_job);
+    m_eviction_job = nullptr;
+  }
 
   m_base_snapshot.valid = false;
   m_base_snapshot.mem1.reset();
@@ -333,7 +336,11 @@ void RollbackManager::ToggleFrameSave()
     m_ring_next  = 0;
     m_ring_count = 0;
 
-    if (m_eviction_future.valid()) m_eviction_future.wait();
+    if (m_eviction_job)
+    {
+      job::DrainJobsUntilComplete(m_dispatch_thread, m_eviction_job);
+      m_eviction_job = nullptr;
+    }
     m_base_snapshot.valid = false;
 
     JITDirtyBitmap::Get().Clear();
@@ -381,10 +388,14 @@ void RollbackManager::SaveFrame(Core::System& system)
   {
     ROLLBACK_ZONE_N("Prep eviction");
     // Wait for any in-flight eviction — typically completes within the same frame.
-    if (m_eviction_future.valid()) m_eviction_future.wait();
+    if (m_eviction_job)
+    {
+      job::DrainJobsUntilComplete(m_dispatch_thread, m_eviction_job);
+      m_eviction_job = nullptr;
+    }
     auto evicted = std::make_shared<Rollback::EvictedDelta>(m_slots[slot].ExtractDeltas());
-    m_eviction_future = std::async(std::launch::async,
-      [this, evicted]() mutable
+    m_eviction_job = job::KickRootJob(m_dispatch_thread,
+      [this, evicted](job::JobTaskThread&, job::Job&) mutable
       {
         ROLLBACK_THREAD_NAME("Rollback Eviction");
         ROLLBACK_ZONE_N("BaseSnapshot::Evict");
