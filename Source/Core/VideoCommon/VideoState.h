@@ -11,3 +11,8 @@ void VideoCommon_DoState(PointerWrap& p);
 // Register state (BP/XF/FIFO) is always saved. Must match between save and load.
 void VideoCommon_SetSkipGPUReadbackForRollback(bool skip);
 bool VideoCommon_GetSkipGPUReadbackForRollback();
+
+// Skips the VertexManager::Flush() call at the start of DoState during rollback.
+// The flush submits a GPU draw which is wasted work when we're about to re-simulate the frame.
+void VideoCommon_SetSkipVertexFlushForRollback(bool skip);
+bool VideoCommon_GetSkipVertexFlushForRollback();

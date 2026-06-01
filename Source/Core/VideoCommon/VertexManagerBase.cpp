@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 #include "VideoCommon/VertexManagerBase.h"
+#include "VideoCommon/VideoState.h"
 
 #include <array>
 #include <cmath>
@@ -680,7 +681,7 @@ void VertexManagerBase::Flush()
 
 void VertexManagerBase::DoState(PointerWrap& p)
 {
-  if (p.IsReadMode())
+  if (p.IsReadMode() && !VideoCommon_GetSkipVertexFlushForRollback())
   {
     // Flush old vertex data before loading state.
     Flush();

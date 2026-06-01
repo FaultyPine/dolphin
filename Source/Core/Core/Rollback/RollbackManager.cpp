@@ -189,6 +189,7 @@ void RollbackManager::BeginDoState()
   m_skip_ram_in_dostate.store(true, std::memory_order_seq_cst);
   m_skip_jit_clear_in_dostate.store(true, std::memory_order_seq_cst);
   VideoCommon_SetSkipGPUReadbackForRollback(true);
+  VideoCommon_SetSkipVertexFlushForRollback(true);
   m_skip_ios_in_dostate.store(true, std::memory_order_seq_cst);
   PowerPC_SetSkipDCacheFlushForRollback(true);
   PowerPC_SetSkipCPURegsForRollback(true);
@@ -199,6 +200,7 @@ void RollbackManager::EndDoState()
   PowerPC_SetSkipCPURegsForRollback(false);
   PowerPC_SetSkipDCacheFlushForRollback(false);
   m_skip_ios_in_dostate.store(false, std::memory_order_seq_cst);
+  VideoCommon_SetSkipVertexFlushForRollback(false);
   VideoCommon_SetSkipGPUReadbackForRollback(false);
   m_skip_jit_clear_in_dostate.store(false, std::memory_order_seq_cst);
   m_skip_ram_in_dostate.store(false, std::memory_order_seq_cst);

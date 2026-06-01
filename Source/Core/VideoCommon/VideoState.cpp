@@ -28,6 +28,7 @@
 #include "VideoCommon/XFStateManager.h"
 
 static bool s_skip_gpu_readback_for_rollback = false;
+static bool s_skip_vertex_flush_for_rollback = false;
 
 void VideoCommon_SetSkipGPUReadbackForRollback(bool skip)
 {
@@ -37,6 +38,16 @@ void VideoCommon_SetSkipGPUReadbackForRollback(bool skip)
 bool VideoCommon_GetSkipGPUReadbackForRollback()
 {
   return s_skip_gpu_readback_for_rollback;
+}
+
+void VideoCommon_SetSkipVertexFlushForRollback(bool skip)
+{
+  s_skip_vertex_flush_for_rollback = skip;
+}
+
+bool VideoCommon_GetSkipVertexFlushForRollback()
+{
+  return s_skip_vertex_flush_for_rollback;
 }
 
 void VideoCommon_DoState(PointerWrap& p)
