@@ -52,8 +52,7 @@ To find the correct source for each page, we do two passes over the ring buffer:
            first hit = source   (no hit = use base snapshot)
 ```
 
-BOOKMARK: Continue parallelizing loadstate, still easy wins to be had there!
-- overlap DoState & l1 restore with all the ram stuff
+TODO: Could continue parallelizing loadstate, still some easy wins to be had there (though at this point it's kinda diminishing returns, loadstate is no longer much of a bottleneck)
 
 
 ## GAME SIM
@@ -61,3 +60,10 @@ BOOKMARK: Continue parallelizing loadstate, still easy wins to be had there!
 probably through jit instrumentation & the existing jit profiler, but have it emit profiling events that i can symbolicate offline somehow (chrome tracing format?)
 Tried implementing a JIT Tracer. Current bookmark is symbols aren't symbolicating and the chrome tracing events were formatted a little weirdly.
 
+
+## BUGS
+- inputs getting "stuck"
+- end of match freeze
+- Some randomly super-expensive GameSimFrame zones... some are filled with real work it seems, some are filled with CoreTiming::Throttle -> Sleeps!
+    - for the sleeps ones, maybe it's rollback related? We can probably fiddle with the throttle logic for rollbacks/resims which might help?
+- Some randomly super-expensive BrawlbackFrame calls that DONT have GameSimFrame inside. It's unaccounted for time.
