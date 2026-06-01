@@ -18,12 +18,12 @@ namespace Rollback
 {
 
 // Specified as a Wii virtual address, stored internally as physical offsets
-struct ExcludeRegion
+struct MemoryRegion
 {
   uint32_t phys_start;  // virt_addr & 0x1FFF'FFFFu
   uint32_t phys_end;    // phys_start + size
 
-  static ExcludeRegion FromVirt(uint32_t virt_addr, uint32_t size_bytes)
+  static MemoryRegion FromVirt(uint32_t virt_addr, uint32_t size_bytes)
   {
     const uint32_t phys = virt_addr & 0x1FFF'FFFFu;
     return {phys, phys + size_bytes};
@@ -32,7 +32,7 @@ struct ExcludeRegion
 
 void savestateMemcpy(void* dst, const void* src, size_t size,
                      uint32_t dst_phys,
-                     const std::vector<ExcludeRegion>& exclude_regions);
+                     const std::vector<MemoryRegion>& exclude_regions);
 
 }  // namespace Rollback
 
@@ -119,6 +119,6 @@ public:
   bool m_has_state = false;
 };
 
-void RestoreRegionDelta(const RegionDelta& delta, uint8_t* region_base, uint32_t region_phys_base, const std::vector<ExcludeRegion>& excl);
+void RestoreRegionDelta(const RegionDelta& delta, uint8_t* region_base, uint32_t region_phys_base, const std::vector<MemoryRegion>& excl);
 
 }  // namespace Rollback

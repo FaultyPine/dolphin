@@ -54,7 +54,7 @@ __forceinline static void copy_avx2_nt_unroll(void* __restrict dst, const void* 
 // TODO: profile this, if it's slow maybe we can sort the exclusion list beforehand
 void savestateMemcpy(void* dst, const void* src, size_t size,
                      uint32_t dst_phys,
-                     const std::vector<ExcludeRegion>& excl)
+                     const std::vector<MemoryRegion>& excl)
 {
   if (excl.empty())
   {
@@ -131,7 +131,7 @@ void DeltaSaveSlot::Reset()
 //   MEM1 -> 0,          MEM2 -> 0x10000000
 void RestoreRegionDelta(const RegionDelta& delta, uint8_t* region_base,
                                uint32_t region_phys_base,
-                               const std::vector<ExcludeRegion>& excl)
+                               const std::vector<MemoryRegion>& excl)
 {
   for (uint32_t i = 0; i < delta.page_count; ++i)
   {

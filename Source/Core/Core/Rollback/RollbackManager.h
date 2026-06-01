@@ -83,7 +83,7 @@ public:
 
   DeltaSaveSlot m_slots[NUM_SAVE_SLOTS];
 
-  std::vector<ExcludeRegion> m_exclude_regions;
+  std::vector<MemoryRegion> m_exclude_regions;
 
   int m_ring_next  = 0;  // index of the slot that will be written by the next savestate
   int m_ring_count = 0;

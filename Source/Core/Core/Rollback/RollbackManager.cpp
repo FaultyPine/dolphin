@@ -121,7 +121,7 @@ void RollbackManager::CompareValSnapshot(int target_slot, int frames_back) const
 
   if (mem1_mismatch == 0 && mem2_mismatch == 0)
   {
-    const ExcludeRegion& stack_excl = m_exclude_regions.back();
+    const MemoryRegion& stack_excl = m_exclude_regions.back();
     INFO_LOG_FMT(COMMON,
                  "[Rollback] VALIDATE OK  step={}  slot={}  brawl_frame={} (want {})  {}  "
                  "stack_excl=[0x{:08x},0x{:08x})",
@@ -157,7 +157,7 @@ void RollbackManager::CompareValSnapshot(int target_slot, int frames_back) const
 
   // Also show the live stack exclusion zone so we can tell whether wrong pages
   // are just outside it (which would explain state corruption on return).
-  const ExcludeRegion& stack_excl = m_exclude_regions.back();
+  const MemoryRegion& stack_excl = m_exclude_regions.back();
   WARN_LOG_FMT(COMMON,
                "[Rollback] VALIDATE FAIL  step={}  slot={}  - {} MEM1 + "
                "{} MEM2 page(s) wrong.  "
@@ -209,21 +209,22 @@ void RollbackManager::EndDoState()
 void RollbackManager::AddExcludeRegion(uint32_t virt_addr, uint32_t size_bytes)
 {
   INFO_LOG_FMT(BRAWLBACK, "Added exclude region {} - {}", virt_addr, virt_addr + size_bytes);
-  m_exclude_regions.push_back(ExcludeRegion::FromVirt(virt_addr, size_bytes));
+  m_exclude_regions.push_back(MemoryRegion::FromVirt(virt_addr, size_bytes));
 }
 
-static const std::vector<ExcludeRegion> s_brawlback_hardcoded_exclude_regions = {
+static const std::vector<MemoryRegion> s_brawlback_hardcoded_exclude_regions = {
   // Brawlback C++ framework heap (MEM2).
   // This holds rollback control state (framesToAdvance, pastFrameDatas, etc.)
   // that must survive across a rollback restore unchanged.
-  //ExcludeRegion::FromVirt(0x935d7660u, 0x89a0u),
-  ExcludeRegion::FromVirt(0x935d3940u, 0x0000c6c0),
+  //MemoryRegion::FromVirt(0x935d7660u, 0x89a0u),
+  MemoryRegion::FromVirt(0x935d3940u, 0x0000c6c0),
   // default gecko codes region (do we actually want to exclude this? probably not...
-  // ExcludeRegion::FromVirt(0x80001800, 0x80003000),
+  // MemoryRegion::FromVirt(0x80001800, 0x80003000),
 
   // bss/data sections of our cpp code framework
   // see "infoSegmentAddress" - "memoryHeapEndAddress in settings.json in the BuildSystem
-  ExcludeRegion::FromVirt(0x935D0000, 0x10000),
+  MemoryRegion::FromVirt(0x935D0000, 0x10000),
+};
 };
 
 void RollbackManager::Init(Core::System& system)
@@ -482,7 +483,7 @@ void RollbackManager::LoadFrame(Core::System& system, int frames_back)
     /*INFO_LOG_FMT(BRAWLBACK,
                  "[Rollback] stack exclude: r1=0x{:08x} phys=[0x{:08x}, 0x{:08x}) ({} KB)", r1_virt,
                  stack_page, stack_exclude_end, (stack_exclude_end - stack_page) / 1024);*/
-    m_exclude_regions.push_back(ExcludeRegion{stack_page, stack_exclude_end});
+    m_exclude_regions.push_back(MemoryRegion{stack_page, stack_exclude_end});
   }
 
   const int most_recent = Wrap(m_ring_next - 1, NUM_SAVE_SLOTS);
