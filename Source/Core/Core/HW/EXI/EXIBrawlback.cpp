@@ -355,13 +355,12 @@ std::pair<bool, bool> CEXIBrawlback::getInputsForGame(Match::FrameData& framedat
                 framedataToSendToGame.playerFrameDatas[playerIdx] = *remoteFrameData;
                 // we've just received this frame's inputs, so if we were using predicted inputs, we now need to rollback
                 #if ROLLBACK_IMPL
-                if ( ( this->rollbackInfo.isUsingPredictedInputs || this->latestConfirmedFrame < (int)frame ) && frame > GAME_FULL_START_FRAME) {
+                if (this->rollbackInfo.isUsingPredictedInputs && frame > GAME_FULL_START_FRAME) {
                     this->SetupRollback(frame, frame);
                 }
-                #else
-                if (false) {}
+                else
                 #endif
-                else {
+                {
                     INFO_LOG_FMT(BRAWLBACK, "found remote inputs frame {}\n", frame);
                     this->latestConfirmedFrame = (int)frame;
                 }

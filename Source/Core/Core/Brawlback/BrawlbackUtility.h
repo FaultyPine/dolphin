@@ -43,7 +43,7 @@ static_assert(FRAMEDATA_MAX_QUEUE_SIZE > MAX_ROLLBACK_FRAMES);
 #define MAX_NUM_PLAYERS 4
 #define BRAWLBACK_PORT 7779
 
-#define TIMESYNC_MAX_US_OFFSET 10000 // 60% of a frame
+#define TIMESYNC_MAX_US_OFFSET 10000 // 60% of a frame (10ms)
 
 //#define SYNCLOG
 
