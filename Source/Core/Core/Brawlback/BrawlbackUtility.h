@@ -35,9 +35,9 @@ static_assert(FRAMEDATA_MAX_QUEUE_SIZE > MAX_ROLLBACK_FRAMES);
 #define ONLINE_LOCKSTEP_INTERVAL 30
 
 #define GAME_START_FRAME 0
-//#define GAME_FULL_START_FRAME 1
 // before this frame we basically use delay-based netcode to ensure things are reasonably synced up before doing rollback stuff
-#define GAME_FULL_START_FRAME 100
+// we also assume any fighters being loaded in are totally loaded at this point.
+#define GAME_FULL_START_FRAME 250
 
 #define MAX_REMOTE_PLAYERS 3
 #define MAX_NUM_PLAYERS 4
