@@ -5,9 +5,12 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <functional>
+#include <memory>
 #include <vector>
 
 #include "Common/Buffer.h"
+#include "Common/CommonTypes.h"
 #include "Core/Rollback/IRollbackSaveSlot.h"
 
 static constexpr size_t PAGE_SIZE = 4096;
@@ -20,8 +23,8 @@ namespace Rollback
 // Specified as a Wii virtual address, stored internally as physical offsets
 struct MemoryRegion
 {
-  uint32_t phys_start;  // virt_addr & 0x1FFF'FFFFu
-  uint32_t phys_end;    // phys_start + size
+  uint32_t phys_start = 0;  // virt_addr & 0x1FFF'FFFFu
+  uint32_t phys_end = 0;    // phys_start + size
 
   static MemoryRegion FromVirt(uint32_t virt_addr, uint32_t size_bytes)
   {
@@ -29,6 +32,74 @@ struct MemoryRegion
     return {phys, phys + size_bytes};
   }
 };
+
+struct MemoryRegionThroughPtrs : public MemoryRegion
+{
+  uint32_t base_virt_addr;
+  std::vector<uint32_t> pointer_offsets;
+  uint32_t final_data_size;
+
+  static MemoryRegionThroughPtrs FromVirt(uint32_t virt_addr, uint32_t size_bytes)
+  {
+    const uint32_t phys = virt_addr & 0x1FFF'FFFFu;
+    return {phys, phys + size_bytes};
+  }
+
+  static MemoryRegionThroughPtrs FromPtrs(uint32_t virt_addr,
+                                          std::initializer_list<uint32_t> offsets,
+                                          uint32_t data_size)
+  {
+    const uint32_t phys = virt_addr & 0x1FFF'FFFFu;
+    MemoryRegionThroughPtrs r{};
+    r.phys_start = phys;
+    r.phys_end = phys;
+    r.base_virt_addr = virt_addr;
+    r.pointer_offsets = offsets;
+    r.final_data_size = data_size;
+    return r;
+  }
+
+  static uint32_t ResolvePointer(uint32_t phys_addr, uint8_t* mem1_ptr, size_t mem1_size,
+                                 uint8_t* mem2_ptr, size_t mem2_size)
+  {
+    const uint32_t phys_masked = phys_addr & 0x1FFF'FFFFu;
+    u32 value = 0;
+
+    if (phys_masked < mem1_size)
+    {
+      std::memcpy(&value, mem1_ptr + phys_masked, sizeof(u32));
+      // swap32
+      return (value >> 24) | ((value & 0xFF0000) >> 8) | ((value & 0xFF00) << 8) | (value << 24);
+    }
+    else if (phys_masked >= MEM2_BASE && phys_masked - MEM2_BASE < mem2_size)
+    {
+      std::memcpy(&value, mem2_ptr + (phys_masked - MEM2_BASE), sizeof(u32));
+      // swap32
+      return (value >> 24) | ((value & 0xFF0000) >> 8) | ((value & 0xFF00) << 8) | (value << 24);
+    }
+
+    return 0;  // Out of bounds
+  }
+
+  MemoryRegion Resolve(uint8_t* mem1_ptr, size_t mem1_size, uint8_t* mem2_ptr,
+                       size_t mem2_size) const
+  {
+    uint32_t current_phys = base_virt_addr & 0x1FFF'FFFFu;
+
+    // Follow the pointer chain
+    for (int i = 0; i < pointer_offsets.size(); ++i)
+    {
+      uint32_t deref = ResolvePointer(current_phys, mem1_ptr, mem1_size, mem2_ptr, mem2_size);
+      if (deref == 0)
+        return {0, 0};
+
+      current_phys = (deref + pointer_offsets[i]) & 0x1FFF'FFFFu;
+    }
+
+    return MemoryRegion::FromVirt(current_phys, final_data_size);
+  }
+};
+
 
 void savestateMemcpy(void* dst, const void* src, size_t size,
                      uint32_t dst_phys,

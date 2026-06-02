@@ -225,6 +225,38 @@ static const std::vector<MemoryRegion> s_brawlback_hardcoded_exclude_regions = {
   // see "infoSegmentAddress" - "memoryHeapEndAddress in settings.json in the BuildSystem
   MemoryRegion::FromVirt(0x935D0000, 0x10000),
 };
+
+static const std::vector<MemoryRegionThroughPtrs> s_brawlback_hardcoded_desync_detection_regions = {
+    // GAME_FRAME->persistentFrameCounter
+    MemoryRegionThroughPtrs::FromVirt(0x901812a0u + 0x14u, 4),
+
+    // Player damage/percent
+    MemoryRegionThroughPtrs::FromVirt(0x80623324u, 4),  // P1
+    MemoryRegionThroughPtrs::FromVirt(0x80623568u, 4),  // P2
+    MemoryRegionThroughPtrs::FromVirt(0x806237ACu, 4),  // P3
+    MemoryRegionThroughPtrs::FromVirt(0x806239F0u, 4),  // P4
+
+    // Player stock count
+    MemoryRegionThroughPtrs::FromVirt(0x80623318u, 4),  // P1
+    MemoryRegionThroughPtrs::FromVirt(0x8062355Cu, 4),  // P2
+    MemoryRegionThroughPtrs::FromVirt(0x806237A0u, 4),  // P3
+    MemoryRegionThroughPtrs::FromVirt(0x806239E4u, 4),  // P4
+
+    // Player positions
+    MemoryRegionThroughPtrs::FromPtrs(0x80624780u, {0x34u,  0x60u, 0xD8u, 0xCu, 0xCu},  4),  // P1 X
+    MemoryRegionThroughPtrs::FromPtrs(0x80624780u, {0x34u,  0x60u, 0xD8u, 0xCu, 0x10u}, 4),  // P1 Y
+    MemoryRegionThroughPtrs::FromPtrs(0x80624780u, {0x278u, 0x60u, 0xD8u, 0xCu, 0xCu},  4),  // P2 X
+    MemoryRegionThroughPtrs::FromPtrs(0x80624780u, {0x278u, 0x60u, 0xD8u, 0xCu, 0x10u}, 4),  // P2 Y
+    MemoryRegionThroughPtrs::FromPtrs(0x80624780u, {0x4BCu, 0x60u, 0xD8u, 0xCu, 0xCu},  4),  // P3 X
+    MemoryRegionThroughPtrs::FromPtrs(0x80624780u, {0x4BCu, 0x60u, 0xD8u, 0xCu, 0x10u}, 4),  // P3 Y
+    MemoryRegionThroughPtrs::FromPtrs(0x80624780u, {0x700u, 0x60u, 0xD8u, 0xCu, 0xCu},  4),  // P4 X
+    MemoryRegionThroughPtrs::FromPtrs(0x80624780u, {0x700u, 0x60u, 0xD8u, 0xCu, 0x10u}, 4),  // P4 Y
+
+    // Player velocities
+    MemoryRegionThroughPtrs::FromVirt(0x80494F30u, 8),  // P1 Total Velocity (X, Y)
+    MemoryRegionThroughPtrs::FromVirt(0x8049DEE4u, 8),  // P2 Total Velocity (X, Y)
+    MemoryRegionThroughPtrs::FromVirt(0x80494F98u, 8),  // P3 Total Velocity (X, Y)
+    MemoryRegionThroughPtrs::FromVirt(0x80495000u, 8),  // P4 Total Velocity (X, Y)
 };
 
 void RollbackManager::Init(Core::System& system)
