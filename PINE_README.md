@@ -52,18 +52,38 @@ To find the correct source for each page, we do two passes over the ring buffer:
            first hit = source   (no hit = use base snapshot)
 ```
 
-TODO: Could continue parallelizing loadstate, still some easy wins to be had there (though at this point it's kinda diminishing returns, loadstate is no longer much of a bottleneck)
+Could continue parallelizing loadstate, still some easy wins to be had there (though at this point it's kinda diminishing returns, loadstate is no longer much of a bottleneck)
 
 
-## GAME SIM
+## Game sim
 
-probably through jit instrumentation & the existing jit profiler, but have it emit profiling events that i can symbolicate offline somehow (chrome tracing format?)
+would love to have a integration into a profiler for every JIT block, and maybe can symbolicate offline somehow (chrome tracing format?)
 Tried implementing a JIT Tracer. Current bookmark is symbols aren't symbolicating and the chrome tracing events were formatted a little weirdly.
 
+## Netplay
+- desync detector
+  - include some normal game state like player pos, stocks, percent, speed maybe?
+  - also optionally (debug/dev only) include a hash of savestates or ram or something. Some way to say "hey we desynced, and the savestate hashes don't match so it's a savestate problem rather than... something else?"
 
-## BUGS
-- inputs getting "stuck"
+BOOKMARK:
+implementing desync detector.
+hardcoded list of known addrs gotten from eon's dwm file.
+will crawl those (including pointer offset ones) and add them to a hash and compare that hash between clients.
+
+## Buuugs
+- inputs getting "stuck" (only happens in local testing mode...)
 - end of match freeze
 - Some randomly super-expensive GameSimFrame zones... some are filled with real work it seems, some are filled with CoreTiming::Throttle -> Sleeps!
     - for the sleeps ones, maybe it's rollback related? We can probably fiddle with the throttle logic for rollbacks/resims which might help?
-- Some randomly super-expensive BrawlbackFrame calls that DONT have GameSimFrame inside. It's unaccounted for time.
+- Some randomly super-expensive BrawlbackFrame calls that DONT have GameSimFrame inside. Untracked by tracy, idk what's happening there.
+
+
+## Misc
+Superluminal doesn't basically doesn't work at all with dolphin. Since most of the code is through JIT, it can't resolve symbols b/c it relies on stack traces
+I think there's a way to fix this - windows seems to support this sorta thing.
+https://learn.microsoft.com/en-us/windows/win32/api/winnt/nf-winnt-rtlinstallfunctiontablecallback
+https://learn.microsoft.com/en-us/windows/win32/api/winnt/nf-winnt-rtladdfunctiontable
+
+## Cleanup
+all the assorted atomics in rollbackmanager can be merged into 1 that gets checked everywhere
+There's all the stuff in the brawlback folder, and the stuff in the core/Rollback folder. These should get put together.
