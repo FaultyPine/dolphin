@@ -224,7 +224,22 @@ void CEXIBrawlback::handleLocalPadData(u8* data)
         #if ROLLBACK_IMPL
         if (this->rollbackInfo.pastFrameDataPopulated) {
             this->SendCmdToGame(EXICommand::CMD_ROLLBACK, &this->rollbackInfo);
-            this->rollbackInfo.Reset(); // reset rollbackInfo
+
+            // If the rollback window included predicted frames (endFrame > confirmFrame),
+            // preserve the prediction flag and inputs so the next real-input arrival triggers a rollback
+            const bool predicted_in_window = rollbackInfo.endFrame > (u32)latestConfirmedFrame;
+            const u32 saved_end = rollbackInfo.endFrame;
+            const Match::FrameData saved_predicted = rollbackInfo.predictedInputs;
+
+            this->rollbackInfo.Reset();
+
+            if (predicted_in_window) {
+                INFO_LOG_FMT(BRAWLBACK,
+                    "Rollback window had predictions (endFrame={} > confirmedFrame={}); keeping isUsingPredictedInputs",
+                    saved_end, latestConfirmedFrame);
+                rollbackInfo.isUsingPredictedInputs = true;
+                rollbackInfo.predictedInputs = saved_predicted;
+            }
             return;
         }
         #endif
