@@ -229,6 +229,7 @@ void CEXIBrawlback::handleLocalPadData(u8* data)
             // preserve the prediction flag and inputs so the next real-input arrival triggers a rollback
             const bool predicted_in_window = rollbackInfo.endFrame > (u32)latestConfirmedFrame;
             const u32 saved_end = rollbackInfo.endFrame;
+            // NOTE/BUG: instead of using previous predicted inputs, wouldn't we want to use the newly-received remote inputs for our predicted inputs?
             const Match::FrameData saved_predicted = rollbackInfo.predictedInputs;
 
             this->rollbackInfo.Reset();
