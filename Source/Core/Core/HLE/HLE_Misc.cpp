@@ -6,6 +6,7 @@
 #include "Common/CommonTypes.h"
 #include "Core/Core.h"
 #include "Core/GeckoCode.h"
+#include "Core/HW/EXI/EXIBrawlback_GekkoNet.h"
 #include "Core/HW/CPU.h"
 #include "Core/Host.h"
 #include "Core/PowerPC/MMU.h"
@@ -78,5 +79,10 @@ void GeckoReturnTrampoline(const Core::CPUThreadGuard& guard)
         PowerPC::MMU::HostRead<u64>(guard, SP + 24 + 2 * i * sizeof(u64)),
         PowerPC::MMU::HostRead<u64>(guard, SP + 24 + (2 * i + 1) * sizeof(u64)));
   }
+}
+
+void BrawlbackGekkoNetGameLoop(const Core::CPUThreadGuard& guard)
+{
+  CEXIBrawlbackGekkoNet::GameLoopHook(guard);
 }
 }  // namespace HLE_Misc

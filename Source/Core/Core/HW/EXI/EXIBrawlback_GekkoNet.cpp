@@ -9,6 +9,8 @@
 #include "Common/Thread.h"
 #include "Common/Timer.h"
 #include "Core/ConfigManager.h"
+#include "Core/Core.h"
+#include "Core/HLE/HLE.h"
 #include "Core/HW/Memmap.h"
 #include "Core/PowerPC/PowerPC.h"
 #include "Core/Rollback/RollbackManager.h"
@@ -20,6 +22,7 @@ using json = nlohmann::json;
 
 #include <chrono>
 #include <cstring>
+#include <array>
 #include <thread>
 
 // ---- Construction / Destruction ----
@@ -27,11 +30,16 @@ using json = nlohmann::json;
 CEXIBrawlbackGekkoNet::CEXIBrawlbackGekkoNet(Core::System& system) : IEXIDevice(system)
 {
     INFO_LOG_FMT(BRAWLBACK, "GekkoNet EXI device created");
+    ASSERT(s_active_device == nullptr);
+    s_active_device = this;
     m_matchmaking = std::make_unique<Matchmaking>(GetUserInfo());
 }
 
 CEXIBrawlbackGekkoNet::~CEXIBrawlbackGekkoNet()
 {
+    if (s_active_device == this)
+        s_active_device = nullptr;
+    HLE::UnPatch(m_system, "BrawlbackGekkoNetGameLoop");
     s_override_active = false;
     DestroyGekkoSession();
     if (m_matchmaking_thread.joinable())
@@ -51,6 +59,7 @@ void CEXIBrawlbackGekkoNet::DMAWrite(u32 address, u32 size)
     {
     case GKK_CMD_FRAME:       HandleFrame(payload);           break;
     case GKK_FIND_OPPONENT:   HandleFindOpponent(payload);    break;
+    case GKK_END_MATCH:       HandleEndMatch();               break;
     case GKK_START_MATCH:     HandleStartMatch(payload);      break;
     case GKK_REG_EXCLUDE:     HandleRegisterExclude(payload); break;
     default: break;
@@ -75,6 +84,31 @@ void CEXIBrawlbackGekkoNet::DMARead(u32 address, u32 size)
 bool CEXIBrawlbackGekkoNet::IsPresent() const { return true; }
 void CEXIBrawlbackGekkoNet::TransferByte(u8&) {}
 void CEXIBrawlbackGekkoNet::DoState(PointerWrap&) {}
+
+// ---- mainLoopSub gameProc loop ownership ----
+
+void CEXIBrawlbackGekkoNet::GameLoopHook(const Core::CPUThreadGuard& guard)
+{
+    if (!s_active_device || !s_active_device->ShouldControlGameLoop())
+    {
+        auto& ppc_state = guard.GetSystem().GetPPCState();
+        ppc_state.gpr[25] = 0;  // original instruction at 0x80017344: li r25, 0
+        ppc_state.npc = BRAWL_GAME_LOOP_HOOK_ADDR + 4;
+        return;
+    }
+    s_active_device->RunDolphinControlledGameLoop(guard);
+}
+
+bool CEXIBrawlbackGekkoNet::ShouldControlGameLoop() const
+{
+    return m_session != nullptr;
+}
+
+void CEXIBrawlbackGekkoNet::RunDolphinControlledGameLoop(const Core::CPUThreadGuard& guard)
+{
+    HandleFrame(nullptr);
+    guard.GetSystem().GetPPCState().npc = BRAWL_GAME_LOOP_AFTER_ADDR;
+}
 
 // ---- Input injection ----
 // Dual path: SI override (catches PADRead if it fires during SingleStep)
@@ -136,7 +170,6 @@ void CEXIBrawlbackGekkoNet::RunPPCFunction(u32 addr, u32 r3, u32 r4)
     auto& ppc   = m_system.GetPowerPC();
     auto& state = ppc.GetPPCState();
 
-    // Save volatile PPC state
     u32 saved_pc  = state.pc;
     u32 saved_npc = state.npc;
     u32 saved_lr  = state.spr[SPR_LR];
@@ -144,19 +177,29 @@ void CEXIBrawlbackGekkoNet::RunPPCFunction(u32 addr, u32 r3, u32 r4)
     auto saved_cr = state.cr;
     u8  saved_xer_ca    = state.xer_ca;
     u8  saved_xer_so_ov = state.xer_so_ov;
-    u32 saved_gpr[32];
-    memcpy(saved_gpr, state.gpr, sizeof(saved_gpr));
-    PowerPC::PairedSingle saved_ps[14];
-    memcpy(saved_ps, state.ps, sizeof(PowerPC::PairedSingle) * 14);
+    std::array<u32, 32> saved_gpr;
+    memcpy(saved_gpr.data(), state.gpr, sizeof(state.gpr));
+    std::array<PowerPC::PairedSingle, 32> saved_ps;
+    memcpy(saved_ps.data(), state.ps, sizeof(state.ps));
 
     state.gpr[3] = r3;
     state.gpr[4] = r4;
     state.pc     = addr;
     state.npc    = addr + 4;
-    state.spr[SPR_LR] = 0;
+    state.spr[SPR_LR] = BRAWL_PPC_CALL_RETURN_ADDR;
 
-    while (state.pc != 0)
+    u32 steps = 0;
+    while (state.pc != BRAWL_PPC_CALL_RETURN_ADDR)
+    {
+        if (state.pc < 0x80000000 || ++steps > 200000)
+        {
+            ERROR_LOG_FMT(BRAWLBACK,
+                          "GekkoNet: PPC call aborted addr={:08x} pc={:08x} npc={:08x} lr={:08x} steps={}",
+                          addr, state.pc, state.npc, state.spr[SPR_LR], steps);
+            break;
+        }
         ppc.SingleStep();
+    }
 
     state.pc  = saved_pc;
     state.npc = saved_npc;
@@ -165,8 +208,8 @@ void CEXIBrawlbackGekkoNet::RunPPCFunction(u32 addr, u32 r3, u32 r4)
     state.cr  = saved_cr;
     state.xer_ca    = saved_xer_ca;
     state.xer_so_ov = saved_xer_so_ov;
-    memcpy(state.gpr, saved_gpr, sizeof(saved_gpr));
-    memcpy(state.ps, saved_ps, sizeof(PowerPC::PairedSingle) * 14);
+    memcpy(state.gpr, saved_gpr.data(), sizeof(state.gpr));
+    memcpy(state.ps, saved_ps.data(), sizeof(state.ps));
 }
 
 void CEXIBrawlbackGekkoNet::RunGameProc(int resim_index)
@@ -175,48 +218,97 @@ void CEXIBrawlbackGekkoNet::RunGameProc(int resim_index)
     RunPPCFunction(BRAWL_GAMEPROC_ADDR, gf_app, static_cast<u32>(resim_index));
 }
 
+void CEXIBrawlbackGekkoNet::RunClearPadEdgeRepert()
+{
+    RunPPCFunction(BRAWL_CLEAR_PAD_EDGE_REPERT_ADDR, BRAWL_PADSYSTEM_INSTANCE);
+}
+
+GKKFramePayload CEXIBrawlbackGekkoNet::ReadFramePayloadFromGameMemory() const
+{
+    const auto& mem = m_system.GetMemory();
+    GKKFramePayload payload{};
+    payload.frame = mem.Read_U32(BRAWL_GAME_FRAME_PTR + BRAWL_PERSISTENT_FRAME_COUNTER_OFF);
+
+    const u32 pad_base =
+        BRAWL_PAD_RAW_BASE + static_cast<u32>(m_local_player_idx) * BRAWL_PAD_STRIDE;
+    payload.pad.buttons = mem.Read_U16(pad_base + PAD_OFF_BUTTONS);
+    payload.pad.stickX = static_cast<char>(mem.Read_U8(pad_base + PAD_OFF_STICKS + 0));
+    payload.pad.stickY = static_cast<char>(mem.Read_U8(pad_base + PAD_OFF_STICKS + 1));
+    payload.pad.cStickX = static_cast<char>(mem.Read_U8(pad_base + PAD_OFF_STICKS + 2));
+    payload.pad.cStickY = static_cast<char>(mem.Read_U8(pad_base + PAD_OFF_STICKS + 3));
+    payload.pad.LTrigger = static_cast<char>(mem.Read_U8(pad_base + PAD_OFF_STICKS + 4));
+    payload.pad.RTrigger = static_cast<char>(mem.Read_U8(pad_base + PAD_OFF_STICKS + 5));
+    return payload;
+}
+
 // ---- Core per-frame handler ----
 // Called once per mainLoopSub iteration from the game's DMAWrite hook.
 // LoadFrame does NOT restore PPC state → resim happens inline, no re-entry.
 
 void CEXIBrawlbackGekkoNet::HandleFrame(u8* payload)
 {
-    if (!payload) return;
-
-    auto* p = reinterpret_cast<GKKFramePayload*>(payload);
-    int frame = static_cast<int>(Common::swap32(p->frame));
+    GKKFramePayload local_payload = payload ? *reinterpret_cast<GKKFramePayload*>(payload) :
+                                             ReadFramePayloadFromGameMemory();
+    auto* p = &local_payload;
+    int frame = payload ? static_cast<int>(Common::swap32(p->frame)) :
+                          static_cast<int>(p->frame);
     m_current_frame = frame;
     auto& rbMgr = Rollback::RollbackManager::Get();
 
-    if (frame == GAME_START_FRAME && !m_rb_initialized)
+    if (!m_rb_initialized)
     {
         rbMgr.Init(m_system);
         m_rb_initialized = true;
     }
 
-    if (!m_session || !m_session_started)
+    if (!m_session)
     {
         return;
     }
 
-    // Feed GekkoNet
+    // Feed and tick GekkoNet. UpdateSession drives connection/session events too.
     gekko_add_local_input(m_session, m_local_handle, &p->pad);
-    gekko_network_poll(m_session);
+
+    int gc = 0;
+    auto** ge = gekko_update_session(m_session, &gc);
 
     int sc = 0;
     auto** se = gekko_session_events(m_session, &sc);
     for (int i = 0; i < sc; i++)
     {
-        if (se[i]->type == GekkoSessionStarted) m_session_started = true;
-        else if (se[i]->type == GekkoPlayerDisconnected) { return; }
-        else if (se[i]->type == GekkoDesyncDetected)
+        switch (se[i]->type)
+        {
+        case GekkoPlayerSyncing:
+            INFO_LOG_FMT(BRAWLBACK, "GekkoNet: player {} syncing {}/{}",
+                         se[i]->data.syncing.handle, se[i]->data.syncing.current,
+                         se[i]->data.syncing.max);
+            break;
+        case GekkoPlayerConnected:
+            INFO_LOG_FMT(BRAWLBACK, "GekkoNet: player {} connected", se[i]->data.connected.handle);
+            break;
+        case GekkoSessionStarted:
+            m_session_started = true;
+            m_connect_wait_ticks = 0;
+            INFO_LOG_FMT(BRAWLBACK, "GekkoNet: session started");
+            break;
+        case GekkoPlayerDisconnected:
+            WARN_LOG_FMT(BRAWLBACK, "GekkoNet: player {} disconnected",
+                         se[i]->data.disconnected.handle);
+            return;
+        case GekkoDesyncDetected:
             WARN_LOG_FMT(BRAWLBACK, "GekkoNet: desync frame {}", se[i]->data.desynced.frame);
+            break;
+        default:
+            break;
+        }
     }
-    if (!m_session_started) { return; }
-
-    // Drive session
-    int gc = 0;
-    auto** ge = gekko_update_session(m_session, &gc);
+    if (!m_session_started)
+    {
+        if (++m_connect_wait_ticks % 120 == 0)
+            INFO_LOG_FMT(BRAWLBACK, "GekkoNet: waiting for session start remote={} local_handle={} remote_handle={}",
+                         m_remote_addr_str, m_local_handle, m_remote_handle);
+        return;
+    }
 
     bool has_load   = false;
     int  load_frame = 0;
@@ -233,6 +325,7 @@ void CEXIBrawlbackGekkoNet::HandleFrame(u8* payload)
             *e.data.save.checksum  = 0;
             break;
         case GekkoLoadEvent:
+            ASSERT(!has_load);
             has_load   = true;
             load_frame = e.data.load.frame;
             break;
@@ -255,7 +348,6 @@ void CEXIBrawlbackGekkoNet::HandleFrame(u8* payload)
     if (m_rb_initialized)
         rbMgr.SaveFrame(m_system);
 
-    // Rollback: LoadFrame restores RAM, NOT PPC. Resim happens right here.
     if (has_load)
     {
         int frames_back = m_current_frame - load_frame - 1;
@@ -267,13 +359,14 @@ void CEXIBrawlbackGekkoNet::HandleFrame(u8* payload)
         }
     }
 
-    // Execute all advance frames
     for (int i = 0; i < num_adv; i++)
     {
         if (m_rb_initialized && i > 0)
             rbMgr.SaveFrame(m_system);
         InjectPads(adv_pads[i]);
         RunGameProc(i);
+        if (num_adv > 1 && i == 0)
+            RunClearPadEdgeRepert();
     }
 
     s_override_active = false;
@@ -333,6 +426,9 @@ void CEXIBrawlbackGekkoNet::MatchmakingThread()
 void CEXIBrawlbackGekkoNet::HandleStartMatch(u8* payload)
 {
     if (!payload) return;
+    HLE::Patch(m_system, BRAWL_GAME_LOOP_HOOK_ADDR, "BrawlbackGekkoNetGameLoop");
+    INFO_LOG_FMT(BRAWLBACK, "GekkoNet: patched mainLoopSub gameProc loop hook");
+
     m_game_settings = std::make_unique<Match::GameSettings>(
         *reinterpret_cast<Match::GameSettings*>(payload));
     m_num_players = m_game_settings->numPlayers;
@@ -342,6 +438,20 @@ void CEXIBrawlbackGekkoNet::HandleStartMatch(u8* payload)
     m_read_queue.clear();
     m_read_queue.push_back(static_cast<u8>(GKK_SETUP_PLAYERS));
     m_read_queue.insert(m_read_queue.end(), bytes.begin(), bytes.end());
+    INFO_LOG_FMT(BRAWLBACK, "GekkoNet: CPU core {}", m_system.GetPowerPC().GetCPUName());
+}
+
+void CEXIBrawlbackGekkoNet::HandleEndMatch()
+{
+    INFO_LOG_FMT(BRAWLBACK, "GekkoNet: end match");
+    HLE::UnPatch(m_system, "BrawlbackGekkoNetGameLoop");
+    INFO_LOG_FMT(BRAWLBACK, "GekkoNet: unpatched mainLoopSub gameProc loop hook");
+
+    s_override_active = false;
+    m_rb_initialized = false;
+    m_current_frame = 0;
+    m_game_settings.reset();
+    DestroyGekkoSession();
 }
 
 void CEXIBrawlbackGekkoNet::HandleRegisterExclude(u8* payload)
@@ -368,17 +478,34 @@ void CEXIBrawlbackGekkoNet::InitGekkoSession(const std::string& remote_addr, uns
     cfg.limited_saving          = false;
     gekko_start(m_session, &cfg);
     gekko_net_adapter_set(m_session, gekko_default_adapter(local_port));
-    m_local_handle = gekko_add_actor(m_session, GekkoLocalPlayer, nullptr);
-    gekko_set_local_delay(m_session, m_local_handle, FRAME_DELAY);
     GekkoNetAddress addr{const_cast<char*>(m_remote_addr_str.data()),
                          static_cast<unsigned int>(m_remote_addr_str.size())};
-    m_remote_handle = gekko_add_actor(m_session, GekkoRemotePlayer, &addr);
-    INFO_LOG_FMT(BRAWLBACK, "GekkoNet: init port={} remote={}", local_port, remote_addr);
+    if (m_local_player_idx == 0)
+    {
+        m_local_handle = gekko_add_actor(m_session, GekkoLocalPlayer, nullptr);
+        m_remote_handle = gekko_add_actor(m_session, GekkoRemotePlayer, &addr);
+    }
+    else
+    {
+        m_remote_handle = gekko_add_actor(m_session, GekkoRemotePlayer, &addr);
+        m_local_handle = gekko_add_actor(m_session, GekkoLocalPlayer, nullptr);
+    }
+    gekko_set_local_delay(m_session, m_local_handle, FRAME_DELAY);
+    m_connect_wait_ticks = 0;
+    INFO_LOG_FMT(BRAWLBACK,
+                 "GekkoNet: init port={} remote={} local_player={} local_handle={} remote_handle={}",
+                 local_port, remote_addr, m_local_player_idx, m_local_handle, m_remote_handle);
 }
 
 void CEXIBrawlbackGekkoNet::DestroyGekkoSession()
 {
-    if (m_session) { gekko_destroy(&m_session); m_session = nullptr; m_session_started = false; }
+    if (m_session)
+    {
+        gekko_destroy(&m_session);
+        m_session = nullptr;
+        m_session_started = false;
+        m_connect_wait_ticks = 0;
+    }
     gekko_default_adapter_destroy();
 }
 

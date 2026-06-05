@@ -20,11 +20,17 @@ using namespace Brawlback;
 
 #define BRAWLBACK_USE_GEKKONET 1
 
+namespace Core
+{
+class CPUThreadGuard;
+}
+
 enum GekkoNetCmd : u8
 {
     GKK_CMD_UNKNOWN   = 0,
     GKK_CMD_FRAME     = 20,
     GKK_FIND_OPPONENT = 5,
+    GKK_END_MATCH     = 11,
     GKK_START_MATCH   = 13,
     GKK_SETUP_PLAYERS = 14,
     GKK_REG_EXCLUDE   = 18,
@@ -40,10 +46,16 @@ struct GKKFramePayload
 
 // Brawl addresses
 static constexpr u32 BRAWL_GAMEPROC_ADDR      = 0x80017618;
+static constexpr u32 BRAWL_GAME_LOOP_HOOK_ADDR = 0x80017344;
+static constexpr u32 BRAWL_GAME_LOOP_AFTER_ADDR = 0x800173ac;
+static constexpr u32 BRAWL_PPC_CALL_RETURN_ADDR = BRAWL_GAME_LOOP_AFTER_ADDR;
+static constexpr u32 BRAWL_CLEAR_PAD_EDGE_REPERT_ADDR = 0x8002b62c;
 static constexpr u32 BRAWL_GF_APPLICATION_PTR  = 0x8059ffac;
+static constexpr u32 BRAWL_GAME_FRAME_PTR       = 0x901812a0;
+static constexpr u32 BRAWL_PERSISTENT_FRAME_COUNTER_OFF = 0x14;
 // gfPadSystem instance at 0x805bacc0, raw pads at +0x40, stride 0x40
 static constexpr u32 BRAWL_PADSYSTEM_INSTANCE  = 0x805bacc0;
-static constexpr u32 BRAWL_PAD_RAW_BASE        = 0x805bacc0 + 0x40;
+static constexpr u32 BRAWL_PAD_RAW_BASE = BRAWL_PADSYSTEM_INSTANCE + 0x40;
 static constexpr u32 BRAWL_PAD_STRIDE          = 0x40;
 // gfPadGamecube layout: buttons at +0x06 (u16), sticks at +0x30 (6 bytes)
 static constexpr u32 PAD_OFF_BUTTONS = 0x06;
@@ -62,6 +74,7 @@ public:
 
     // SI override — called from CSIDevice_GCController::GetPadStatus
     static bool GetOverrideInput(int pad_num, GCPadStatus* status);
+    static void GameLoopHook(const Core::CPUThreadGuard& guard);
 
 private:
     std::vector<u8> m_read_queue;
@@ -77,10 +90,13 @@ private:
     u8   m_num_players      = 2;
     bool m_is_host          = true;
     int  m_current_frame    = 0;
+    int  m_connect_wait_ticks = 0;
     std::unique_ptr<Match::GameSettings> m_game_settings;
 
     std::unique_ptr<Matchmaking> m_matchmaking;
     std::thread m_matchmaking_thread;
+
+    static inline CEXIBrawlbackGekkoNet* s_active_device = nullptr;
 
     // SI override state
     static inline std::atomic<bool> s_override_active{false};
@@ -88,8 +104,11 @@ private:
 
     // Handlers
     void HandleFrame(u8* payload);
+    bool ShouldControlGameLoop() const;
+    void RunDolphinControlledGameLoop(const Core::CPUThreadGuard& guard);
     void HandleFindOpponent(u8* payload);
     void HandleStartMatch(u8* payload);
+    void HandleEndMatch();
     void HandleRegisterExclude(u8* payload);
 
     void InitGekkoSession(const std::string& remote_addr, unsigned short local_port);
@@ -98,9 +117,11 @@ private:
     // PPC calling
     void RunPPCFunction(u32 addr, u32 r3 = 0, u32 r4 = 0);
     void RunGameProc(int resim_index);
+    void RunClearPadEdgeRepert();
 
     // Input injection (dual: SI override + direct memory write)
     void InjectPads(const BrawlbackPad pads[MAX_NUM_PLAYERS]);
+    GKKFramePayload ReadFramePayloadFromGameMemory() const;
 
     void ExtractPads(const unsigned char* gekko_inputs, BrawlbackPad out[MAX_NUM_PLAYERS]) const;
     UserInfo GetUserInfo() const;
