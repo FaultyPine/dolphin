@@ -17,6 +17,7 @@
 #include "Core/Movie.h"
 #include "Core/NetPlayProto.h"
 #include "Core/System.h"
+#include "Core/HW/EXI/EXIBrawlback_GekkoNet.h"
 #include "InputCommon/GCPadStatus.h"
 
 namespace SerialInterface
@@ -141,6 +142,10 @@ void CSIDevice_GCController::HandleMoviePadStatus(Movie::MovieManager& movie, in
 GCPadStatus CSIDevice_GCController::GetPadStatus()
 {
   GCPadStatus pad_status = {};
+
+  // Brawlback GekkoNet override: highest priority when active
+  if (CEXIBrawlbackGekkoNet::GetOverrideInput(m_device_number, &pad_status))
+    return pad_status;
 
   // For netplay, the local controllers are polled in GetNetPads(), and
   // the remote controllers receive their status there as well

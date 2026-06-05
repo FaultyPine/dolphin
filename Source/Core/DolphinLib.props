@@ -335,6 +335,7 @@
     <ClInclude Include="Core\HW\EXI\EXI_DeviceDummy.h" />
     <ClInclude Include="Core\HW\EXI\EXI_DeviceEthernet.h" />
     <ClInclude Include="Core\HW\EXI\EXIBrawlback.h" />
+    <ClInclude Include="Core\HW\EXI\EXIBrawlback_GekkoNet.h" />
     <ClInclude Include="Core\HW\EXI\EXI_DeviceGecko.h" />
     <ClInclude Include="Core\HW\EXI\EXI_DeviceIPL.h" />
     <ClInclude Include="Core\HW\EXI\EXI_DeviceMemoryCard.h" />
@@ -1057,6 +1058,19 @@
     <ClCompile Include="Core\HW\EXI\EXI_DeviceDummy.cpp" />
     <ClCompile Include="Core\HW\EXI\EXI_DeviceEthernet.cpp" />
     <ClCompile Include="Core\HW\EXI\EXIBrawlback.cpp" />
+    <ClCompile Include="Core\HW\EXI\EXIBrawlback_GekkoNet.cpp" />
+    <!--GekkoNet library sources: /w disables all warnings, /GR enables RTTI (zpp serializer), GEKKONET_STATIC avoids dllimport-->
+    <ClCompile Include="$(ExternalsDir)GekkoNet\src\gekkonet.cpp"><AdditionalOptions>/w /WX- /GR %(AdditionalOptions)</AdditionalOptions><PreprocessorDefinitions>GEKKONET_STATIC;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile>
+    <ClCompile Include="$(ExternalsDir)GekkoNet\src\game_session.cpp"><AdditionalOptions>/w /WX- /GR %(AdditionalOptions)</AdditionalOptions><PreprocessorDefinitions>GEKKONET_STATIC;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile>
+    <ClCompile Include="$(ExternalsDir)GekkoNet\src\spectator_session.cpp"><AdditionalOptions>/w /WX- /GR %(AdditionalOptions)</AdditionalOptions><PreprocessorDefinitions>GEKKONET_STATIC;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile>
+    <ClCompile Include="$(ExternalsDir)GekkoNet\src\stress_session.cpp"><AdditionalOptions>/w /WX- /GR %(AdditionalOptions)</AdditionalOptions><PreprocessorDefinitions>GEKKONET_STATIC;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile>
+    <ClCompile Include="$(ExternalsDir)GekkoNet\src\backend.cpp"><AdditionalOptions>/w /WX- /GR %(AdditionalOptions)</AdditionalOptions><PreprocessorDefinitions>GEKKONET_STATIC;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile>
+    <ClCompile Include="$(ExternalsDir)GekkoNet\src\event.cpp"><AdditionalOptions>/w /WX- /GR %(AdditionalOptions)</AdditionalOptions><PreprocessorDefinitions>GEKKONET_STATIC;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile>
+    <ClCompile Include="$(ExternalsDir)GekkoNet\src\gekko_input.cpp"><AdditionalOptions>/w /WX- /GR %(AdditionalOptions)</AdditionalOptions><PreprocessorDefinitions>GEKKONET_STATIC;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile>
+    <ClCompile Include="$(ExternalsDir)GekkoNet\src\net.cpp"><AdditionalOptions>/w /WX- /GR %(AdditionalOptions)</AdditionalOptions><PreprocessorDefinitions>GEKKONET_STATIC;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile>
+    <ClCompile Include="$(ExternalsDir)GekkoNet\src\player.cpp"><AdditionalOptions>/w /WX- /GR %(AdditionalOptions)</AdditionalOptions><PreprocessorDefinitions>GEKKONET_STATIC;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile>
+    <ClCompile Include="$(ExternalsDir)GekkoNet\src\storage.cpp"><AdditionalOptions>/w /WX- /GR %(AdditionalOptions)</AdditionalOptions><PreprocessorDefinitions>GEKKONET_STATIC;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile>
+    <ClCompile Include="$(ExternalsDir)GekkoNet\src\sync.cpp"><AdditionalOptions>/w /WX- /GR %(AdditionalOptions)</AdditionalOptions><PreprocessorDefinitions>GEKKONET_STATIC;%(PreprocessorDefinitions)</PreprocessorDefinitions></ClCompile>
     <ClCompile Include="Core\HW\EXI\EXI_DeviceGecko.cpp" />
     <ClCompile Include="Core\HW\EXI\EXI_DeviceIPL.cpp" />
     <ClCompile Include="Core\HW\EXI\EXI_DeviceMemoryCard.cpp" />

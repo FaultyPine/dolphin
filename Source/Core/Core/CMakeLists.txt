@@ -214,6 +214,8 @@ add_library(core
   HW/EXI/EXI_DeviceGecko.h
   HW/EXI/EXIBrawlback.cpp
   HW/EXI/EXIBrawlback.h
+  HW/EXI/EXIBrawlback_GekkoNet.cpp
+  HW/EXI/EXIBrawlback_GekkoNet.h
   HW/EXI/EXI_DeviceIPL.cpp
   HW/EXI/EXI_DeviceIPL.h
   HW/EXI/EXI_DeviceMemoryCard.cpp
@@ -861,6 +863,30 @@ endif()
 if(MSVC)
   # Add precompiled header
   target_link_libraries(core PRIVATE use_pch)
+endif()
+
+# GekkoNet rollback netcode (compiled directly into core to share CRT settings)
+set(GEKKONET_DIR "${CMAKE_SOURCE_DIR}/Externals/GekkoNet")
+target_include_directories(core PRIVATE
+    "${GEKKONET_DIR}/include"
+    "${GEKKONET_DIR}/thirdparty"
+    "${GEKKONET_DIR}/thirdparty/asio"
+)
+target_sources(core PRIVATE
+    "${GEKKONET_DIR}/src/gekkonet.cpp"
+    "${GEKKONET_DIR}/src/game_session.cpp"
+    "${GEKKONET_DIR}/src/spectator_session.cpp"
+    "${GEKKONET_DIR}/src/stress_session.cpp"
+    "${GEKKONET_DIR}/src/backend.cpp"
+    "${GEKKONET_DIR}/src/event.cpp"
+    "${GEKKONET_DIR}/src/gekko_input.cpp"
+    "${GEKKONET_DIR}/src/net.cpp"
+    "${GEKKONET_DIR}/src/player.cpp"
+    "${GEKKONET_DIR}/src/storage.cpp"
+    "${GEKKONET_DIR}/src/sync.cpp"
+)
+if(WIN32)
+    target_link_libraries(core PRIVATE ws2_32)
 endif()
 
 if(USE_RETRO_ACHIEVEMENTS)

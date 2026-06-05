@@ -16,6 +16,7 @@
 #include "Core/HW/EXI/EXI_DeviceMemoryCard.h"
 #include "Core/HW/EXI/EXI_DeviceModem.h"
 #include "Core/HW/EXI/EXIBrawlback.h"
+#include "Core/HW/EXI/EXIBrawlback_GekkoNet.h"
 #include "Core/HW/Memmap.h"
 #include "Core/System.h"
 
@@ -179,7 +180,15 @@ std::unique_ptr<IEXIDevice> EXIDevice_Create(Core::System& system, const EXIDevi
     break;
 
   case EXIDeviceType::Brawlback:
+#ifdef BRAWLBACK_USE_GEKKONET
+    result = std::make_unique<CEXIBrawlbackGekkoNet>(system);
+#else
     result = std::make_unique<CEXIBrawlback>(system);
+#endif
+    break;
+
+  case EXIDeviceType::BrawlbackGekkoNet:
+    result = std::make_unique<CEXIBrawlbackGekkoNet>(system);
     break;
 
   case EXIDeviceType::Baseboard:

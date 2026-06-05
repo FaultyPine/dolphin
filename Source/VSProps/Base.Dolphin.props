@@ -18,6 +18,10 @@
       <AdditionalIncludeDirectories>$(ExternalsDir)VulkanMemoryAllocator\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalIncludeDirectories>$(ExternalsDir)watcher\watcher\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <AdditionalIncludeDirectories>$(ExternalsDir)wil\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <!--GekkoNet rollback netcode library-->
+      <AdditionalIncludeDirectories>$(ExternalsDir)GekkoNet\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ExternalsDir)GekkoNet\thirdparty;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <AdditionalIncludeDirectories>$(ExternalsDir)GekkoNet\thirdparty\asio;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <!--WIL doesn't have it's own vcxproj/exports, and no externals reference WIL, so this is fine to define only for Dolphin-->
       <PreprocessorDefinitions>WIL_SUPPRESS_EXCEPTIONS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <!--Prevent Windows.h from defining some common stuff-->
