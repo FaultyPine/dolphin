@@ -187,10 +187,6 @@ std::unique_ptr<IEXIDevice> EXIDevice_Create(Core::System& system, const EXIDevi
 #endif
     break;
 
-  case EXIDeviceType::BrawlbackGekkoNet:
-    result = std::make_unique<CEXIBrawlbackGekkoNet>(system);
-    break;
-
   case EXIDeviceType::Baseboard:
     result = std::make_unique<CEXIBaseboard>(system);
     break;
