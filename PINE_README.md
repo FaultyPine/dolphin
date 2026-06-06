@@ -65,13 +65,9 @@ Tried implementing a JIT Tracer. Current bookmark is symbols aren't symbolicatin
   - include some normal game state like player pos, stocks, percent, speed maybe?
   - also optionally (debug/dev only) include a hash of savestates or ram or something. Some way to say "hey we desynced, and the savestate hashes don't match so it's a savestate problem rather than... something else?"
 
-BOOKMARK:
-implementing desync detector.
-hardcoded list of known addrs gotten from eon's dwm file.
-will crawl those (including pointer offset ones) and add them to a hash and compare that hash between clients.
+BOOKMARK: diagnose the desyncs.
 
 ## Buuugs
-- inputs getting "stuck" (only happens in local testing mode...)
 - end of match freeze
 - Some randomly super-expensive GameSimFrame zones... some are filled with real work it seems, some are filled with CoreTiming::Throttle -> Sleeps!
     - for the sleeps ones, maybe it's rollback related? We can probably fiddle with the throttle logic for rollbacks/resims which might help?
@@ -79,11 +75,16 @@ will crawl those (including pointer offset ones) and add them to a hash and comp
 
 
 ## Misc
-Superluminal doesn't basically doesn't work at all with dolphin. Since most of the code is through JIT, it can't resolve symbols b/c it relies on stack traces
+Superluminal doesn't basically doesn't work at all with dolphin. Since most of the code is through JIT, it can't resolve symbols b/c it relies on (symbolicated) stack traces
 I think there's a way to fix this - windows seems to support this sorta thing.
 https://learn.microsoft.com/en-us/windows/win32/api/winnt/nf-winnt-rtlinstallfunctiontablecallback
 https://learn.microsoft.com/en-us/windows/win32/api/winnt/nf-winnt-rtladdfunctiontable
 
+[COMMON] prints "Want determinism -> false" when booting. We'll want to turn this on for ship.
+
 ## Cleanup
 all the assorted atomics in rollbackmanager can be merged into 1 that gets checked everywhere
 There's all the stuff in the brawlback folder, and the stuff in the core/Rollback folder. These should get put together.
+
+remove all the old rollback infra.
+there's a bunch of code files in different folders, bring them all into one place.

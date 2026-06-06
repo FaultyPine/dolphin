@@ -117,5 +117,6 @@ public:
 };
 
 uint32_t ReadBrawlMatchFrameCounter(const uint8_t* mem2_ptr, size_t mem2_size);
+uint32_t CalculateBrawlbackDesyncChecksum(Core::System& system);
 
 }  // namespace Rollback

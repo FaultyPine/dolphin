@@ -3,8 +3,12 @@
 
 // Rollback profiling - Superluminal and Tracy can be active simultaneously.
 // Comment out either line below to disable that backend at compile time.
+#if defined(HAVE_SUPERLUMINAL_PERFORMANCEAPI)
 #define ROLLBACK_PROFILE_SUPERLUMINAL
+#endif
+#if defined(HAVE_TRACY)
 #define ROLLBACK_PROFILE_TRACY
+#endif
 
 #define PERF_CONCAT_(a, b) a##b
 #define PERF_CONCAT(a, b) PERF_CONCAT_(a, b)

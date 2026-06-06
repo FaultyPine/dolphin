@@ -273,12 +273,7 @@ int CEXIBrawlbackGekkoNet::HandleFrame(u8* payload)
 
     int gc = 0;
     GekkoGameEvent** ge = nullptr;
-
-    const bool brawl_frame_started = frame > 0;
-    if (!m_session_started)
-    {
-        ge = gekko_update_session(m_session, &gc);
-
+    const auto process_session_events = [&]() {
         int sc = 0;
         auto** se = gekko_session_events(m_session, &sc);
         for (int i = 0; i < sc; i++)
@@ -301,14 +296,29 @@ int CEXIBrawlbackGekkoNet::HandleFrame(u8* payload)
             case GekkoPlayerDisconnected:
                 WARN_LOG_FMT(BRAWLBACK, "GekkoNet: player {} disconnected",
                              se[i]->data.disconnected.handle);
-                return 0;
+                return false;
             case GekkoDesyncDetected:
-                WARN_LOG_FMT(BRAWLBACK, "GekkoNet: desync frame {}", se[i]->data.desynced.frame);
+                if (se[i]->data.desynced.frame < GAME_FULL_START_FRAME)
+                    break;
+                WARN_LOG_FMT(BRAWLBACK,
+                             "GekkoNet: desync frame={} remote={} local_checksum={:08x} remote_checksum={:08x}",
+                             se[i]->data.desynced.frame, se[i]->data.desynced.remote_handle,
+                             se[i]->data.desynced.local_checksum,
+                             se[i]->data.desynced.remote_checksum);
                 break;
             default:
                 break;
             }
         }
+        return true;
+    };
+
+    const bool brawl_frame_started = frame > 0;
+    if (!m_session_started)
+    {
+        ge = gekko_update_session(m_session, &gc);
+        if (!process_session_events())
+            return 0;
     }
 
     if (!m_session_started)
@@ -337,6 +347,8 @@ int CEXIBrawlbackGekkoNet::HandleFrame(u8* payload)
     gekko_add_local_input(m_session, m_local_handle, &p->pad);
 
     ge = gekko_update_session(m_session, &gc);
+    if (!process_session_events())
+        return 0;
 
     bool has_load   = false;
     int  load_frame = 0;
@@ -349,9 +361,10 @@ int CEXIBrawlbackGekkoNet::HandleFrame(u8* payload)
         switch (e.type)
         {
         case GekkoSaveEvent:
-            // we SaveFrame every frame anyway so this event isn't really used rn
             *e.data.save.state_len = sizeof(u32);
-            *e.data.save.checksum  = 0;
+            *e.data.save.checksum  = rollback_ready ?
+                                          Rollback::CalculateBrawlbackDesyncChecksum(m_system) :
+                                          0;
             break;
         case GekkoLoadEvent:
             ASSERT(!has_load);
@@ -510,7 +523,7 @@ void CEXIBrawlbackGekkoNet::InitGekkoSession(const std::string& remote_addr, uns
     cfg.state_size              = sizeof(u32);
     cfg.input_prediction_window = static_cast<unsigned char>(MAX_ROLLBACK_FRAMES);
     cfg.max_spectators          = 0;
-    cfg.desync_detection        = false;
+    cfg.desync_detection        = true;
     cfg.limited_saving          = false;
     gekko_start(m_session, &cfg);
     gekko_net_adapter_set(m_session, gekko_default_adapter(local_port));

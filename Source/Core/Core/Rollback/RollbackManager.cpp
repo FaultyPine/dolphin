@@ -8,6 +8,7 @@
 #include <cstring>
 #include <fmt/format.h>
 
+#include "Common/Hash.h"
 #include "Common/Logging/Log.h"
 #include "Common/Swap.h"
 #include "Core/HW/Memmap.h"
@@ -259,6 +260,49 @@ static const std::vector<MemoryRegionThroughPtrs> s_brawlback_hardcoded_desync_d
     MemoryRegionThroughPtrs::FromVirt(0x80494F98u, 8),  // P3 Total Velocity (X, Y)
     MemoryRegionThroughPtrs::FromVirt(0x80495000u, 8),  // P4 Total Velocity (X, Y)
 };
+
+static const u8* GetRegionPointer(const MemoryRegion& region, const u8* mem1_ptr, size_t mem1_size,
+                                  const u8* mem2_ptr, size_t mem2_size)
+{
+  if (region.phys_start >= region.phys_end)
+    return nullptr;
+
+  if (region.phys_start >= MEM2_BASE)
+  {
+    const u32 mem2_start = region.phys_start - MEM2_BASE;
+    const u32 mem2_end = region.phys_end - MEM2_BASE;
+    if (mem2_ptr && mem2_end <= mem2_size)
+      return mem2_ptr + mem2_start;
+    return nullptr;
+  }
+
+  if (mem1_ptr && region.phys_end <= mem1_size)
+    return mem1_ptr + region.phys_start;
+  return nullptr;
+}
+
+uint32_t CalculateBrawlbackDesyncChecksum(Core::System& system)
+{
+  auto& memory = system.GetMemory();
+  u8* const mem1 = memory.GetRAM();
+  u8* const mem2 = memory.GetEXRAM();
+  const size_t mem1_size = memory.GetRamSize();
+  const size_t mem2_size = memory.GetExRamSize();
+
+  u32 crc = Common::StartCRC32();
+  for (const MemoryRegionThroughPtrs& source_region : s_brawlback_hardcoded_desync_detection_regions)
+  {
+    const bool is_pointer_region =
+        !source_region.pointer_offsets.empty() || source_region.final_data_size != 0;
+    const MemoryRegion region = is_pointer_region ?
+                                    source_region.Resolve(mem1, mem1_size, mem2, mem2_size) :
+                                    MemoryRegion{source_region.phys_start, source_region.phys_end};
+    const u32 region_len = region.phys_end - region.phys_start;
+    if (const u8* ptr = GetRegionPointer(region, mem1, mem1_size, mem2, mem2_size))
+      crc = Common::UpdateCRC32(crc, ptr, region_len);
+  }
+  return crc;
+}
 
 void RollbackManager::Init(Core::System& system)
 {
@@ -617,8 +661,10 @@ void RollbackManager::LoadFrame(Core::System& system, int frames_back)
   // TODO: this is uber parallelizable
     {
       ROLLBACK_ZONE_N("ram page restore");
+#if defined(ROLLBACK_PROFILE_TRACY)
       auto x = StringFromFormat("Restored %u pages", sourceDataToRestore.size());
       ZoneText(x.c_str(), x.size());
+#endif
 
       for (const auto& [pageidx, entry] : sourceDataToRestore)
       {
