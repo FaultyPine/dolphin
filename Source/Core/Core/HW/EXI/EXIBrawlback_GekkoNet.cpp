@@ -3,6 +3,7 @@
 
 #include "Common/ChunkFile.h"
 #include "Common/CommonTypes.h"
+#include "Common/ENet.h"
 #include "Common/FileUtil.h"
 #include "Common/Logging/Log.h"
 #include "Common/Swap.h"
@@ -11,6 +12,7 @@
 #include "Core/ConfigManager.h"
 #include "Core/Core.h"
 #include "Core/HLE/HLE.h"
+#include "Core/HW/GCPad.h"
 #include "Core/HW/Memmap.h"
 #include "Core/PowerPC/PowerPC.h"
 #include "Core/Rollback/RollbackManager.h"
@@ -30,6 +32,9 @@ using json = nlohmann::json;
 CEXIBrawlbackGekkoNet::CEXIBrawlbackGekkoNet(Core::System& system) : IEXIDevice(system)
 {
     INFO_LOG_FMT(BRAWLBACK, "GekkoNet EXI device created");
+    m_enet_initialized = enet_initialize() == 0;
+    if (!m_enet_initialized)
+        ERROR_LOG_FMT(BRAWLBACK, "GekkoNet: failed to initialize ENet");
     ASSERT(s_active_device == nullptr);
     s_active_device = this;
     m_matchmaking = std::make_unique<Matchmaking>(GetUserInfo());
@@ -46,6 +51,8 @@ CEXIBrawlbackGekkoNet::~CEXIBrawlbackGekkoNet()
     if (m_matchmaking_thread.joinable())
         m_matchmaking_thread.join();
     Rollback::RollbackManager::Get().Shutdown();
+    if (m_enet_initialized)
+        enet_deinitialize();
 }
 
 // ---- DMA ----
@@ -189,10 +196,14 @@ void CEXIBrawlbackGekkoNet::InjectPads(const BrawlbackPad pads[MAX_NUM_PLAYERS])
         GCPadStatus& s = s_override_pads[i];
         s = {};
         s.button       = pads[i].buttons;
-        s.stickX       = static_cast<u8>(static_cast<int>(pads[i].stickX) + 128);
-        s.stickY       = static_cast<u8>(static_cast<int>(pads[i].stickY) + 128);
-        s.substickX    = static_cast<u8>(static_cast<int>(pads[i].cStickX) + 128);
-        s.substickY    = static_cast<u8>(static_cast<int>(pads[i].cStickY) + 128);
+        s.stickX       = static_cast<u8>(static_cast<int>(pads[i].stickX) +
+                                   GCPadStatus::MAIN_STICK_CENTER_X);
+        s.stickY       = static_cast<u8>(static_cast<int>(pads[i].stickY) +
+                                   GCPadStatus::MAIN_STICK_CENTER_Y);
+        s.substickX    = static_cast<u8>(static_cast<int>(pads[i].cStickX) +
+                                      GCPadStatus::C_STICK_CENTER_X);
+        s.substickY    = static_cast<u8>(static_cast<int>(pads[i].cStickY) +
+                                      GCPadStatus::C_STICK_CENTER_Y);
         s.triggerLeft  = static_cast<u8>(pads[i].LTrigger);
         s.triggerRight = static_cast<u8>(pads[i].RTrigger);
         s.isConnected  = (i < m_num_players);
@@ -214,19 +225,22 @@ void CEXIBrawlbackGekkoNet::InjectPads(const BrawlbackPad pads[MAX_NUM_PLAYERS])
 
 GKKFramePayload CEXIBrawlbackGekkoNet::ReadFramePayloadFromGameMemory() const
 {
-    auto& mem = m_system.GetMemory();
     GKKFramePayload payload{};
+    auto& mem = m_system.GetMemory();
     payload.frame = Rollback::ReadBrawlMatchFrameCounter(mem.GetEXRAM(), mem.GetExRamSize());
 
-    const u32 pad_base =
-        BRAWL_PAD_RAW_BASE + static_cast<u32>(m_local_player_idx) * BRAWL_PAD_STRIDE;
-    payload.pad.buttons = mem.Read_U16(pad_base + PAD_OFF_BUTTONS);
-    payload.pad.stickX = static_cast<char>(mem.Read_U8(pad_base + PAD_OFF_STICKS + 0));
-    payload.pad.stickY = static_cast<char>(mem.Read_U8(pad_base + PAD_OFF_STICKS + 1));
-    payload.pad.cStickX = static_cast<char>(mem.Read_U8(pad_base + PAD_OFF_STICKS + 2));
-    payload.pad.cStickY = static_cast<char>(mem.Read_U8(pad_base + PAD_OFF_STICKS + 3));
-    payload.pad.LTrigger = static_cast<char>(mem.Read_U8(pad_base + PAD_OFF_STICKS + 4));
-    payload.pad.RTrigger = static_cast<char>(mem.Read_U8(pad_base + PAD_OFF_STICKS + 5));
+    const GCPadStatus status = Pad::GetStatus(0);
+    payload.pad.buttons = status.button;
+    payload.pad.stickX = static_cast<char>(static_cast<int>(status.stickX) -
+                                           GCPadStatus::MAIN_STICK_CENTER_X);
+    payload.pad.stickY = static_cast<char>(static_cast<int>(status.stickY) -
+                                           GCPadStatus::MAIN_STICK_CENTER_Y);
+    payload.pad.cStickX = static_cast<char>(static_cast<int>(status.substickX) -
+                                            GCPadStatus::C_STICK_CENTER_X);
+    payload.pad.cStickY = static_cast<char>(static_cast<int>(status.substickY) -
+                                            GCPadStatus::C_STICK_CENTER_Y);
+    payload.pad.LTrigger = static_cast<char>(status.triggerLeft);
+    payload.pad.RTrigger = static_cast<char>(status.triggerRight);
     return payload;
 }
 
@@ -319,6 +333,7 @@ int CEXIBrawlbackGekkoNet::HandleFrame(u8* payload)
         return 1;
     }
 
+    const bool rollback_ready = frame >= GAME_FULL_START_FRAME;
     gekko_add_local_input(m_session, m_local_handle, &p->pad);
 
     ge = gekko_update_session(m_session, &gc);
@@ -359,10 +374,10 @@ int CEXIBrawlbackGekkoNet::HandleFrame(u8* payload)
         return 0;
     }
 
-    if (m_rb_initialized)
+    if (rollback_ready && m_rb_initialized)
         rbMgr.SaveFrame(m_system);
 
-    if (has_load)
+    if (rollback_ready && has_load)
     {
         int frames_back = m_current_frame - load_frame - 1;
         if (frames_back >= 1 && frames_back <= MAX_ROLLBACK_FRAMES &&
@@ -441,11 +456,12 @@ void CEXIBrawlbackGekkoNet::HandleStartMatch(u8* payload)
     m_num_players = m_game_settings->numPlayers;
     if (m_num_players == 0) m_num_players = 2;
     HandleFindOpponent(nullptr);
-    m_game_settings->localPlayerIdx = static_cast<u8>(m_local_player_idx);
-    auto bytes = Mem::structToByteVector(m_game_settings.get());
-    m_read_queue.clear();
-    m_read_queue.push_back(static_cast<u8>(GKK_SETUP_PLAYERS));
-    m_read_queue.insert(m_read_queue.end(), bytes.begin(), bytes.end());
+    Match::GameSettings remote_settings{};
+    if (ExchangeGameSettings(&remote_settings))
+        MergeGameSettings(remote_settings);
+    else
+        m_game_settings->localPlayerIdx = static_cast<u8>(m_local_player_idx);
+    QueueGameSettingsResponse();
     INFO_LOG_FMT(BRAWLBACK, "GekkoNet: CPU core {}", m_system.GetPowerPC().GetCPUName());
 }
 
@@ -477,6 +493,7 @@ void CEXIBrawlbackGekkoNet::HandleRegisterExclude(u8* payload)
 void CEXIBrawlbackGekkoNet::InitGekkoSession(const std::string& remote_addr, unsigned short local_port)
 {
     DestroyGekkoSession();
+    m_local_port = local_port;
     if (!gekko_create(&m_session, GekkoGameSession)) return;
     GekkoConfig cfg{};
     cfg.num_players             = 2;
@@ -507,6 +524,152 @@ void CEXIBrawlbackGekkoNet::InitGekkoSession(const std::string& remote_addr, uns
                  local_port, remote_addr, m_local_player_idx, m_local_handle, m_remote_handle);
 }
 
+bool CEXIBrawlbackGekkoNet::ExchangeGameSettings(Match::GameSettings* remote_settings) const
+{
+    if (!remote_settings || !m_game_settings || !m_enet_initialized || m_remote_addr_str.empty() ||
+        m_local_port == 0)
+        return false;
+
+    constexpr u32 SETTINGS_MAGIC = 0x474B4753; // GKGS
+    struct SettingsPacket
+    {
+        u32 magic;
+        Match::GameSettings settings;
+    };
+
+    const auto colon = m_remote_addr_str.rfind(':');
+    if (colon == std::string::npos)
+        return false;
+
+    const std::string remote_ip = m_remote_addr_str.substr(0, colon);
+    const auto remote_port = static_cast<unsigned short>(std::stoi(m_remote_addr_str.substr(colon + 1)));
+    const auto local_settings_port = static_cast<unsigned short>(m_local_port + 100);
+    const auto remote_settings_port = static_cast<unsigned short>(remote_port + 100);
+    const SettingsPacket outgoing{SETTINGS_MAGIC, *m_game_settings};
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(80);
+
+    if (m_local_player_idx == 0)
+    {
+        ENetAddress local_addr{};
+        local_addr.host = ENET_HOST_ANY;
+        local_addr.port = local_settings_port;
+        Common::ENet::ENetHostPtr host(enet_host_create(&local_addr, 1, 1, 0, 0));
+        if (!host)
+            return false;
+
+        while (std::chrono::steady_clock::now() < deadline)
+        {
+            ENetEvent event{};
+            while (enet_host_service(host.get(), &event, 10) > 0)
+            {
+                if (event.type == ENET_EVENT_TYPE_RECEIVE)
+                {
+                    const auto* incoming = static_cast<const SettingsPacket*>(
+                        static_cast<const void*>(event.packet->data));
+                    if (event.packet->dataLength == sizeof(SettingsPacket) &&
+                        incoming->magic == SETTINGS_MAGIC)
+                    {
+                        *remote_settings = incoming->settings;
+                        ENetPacket* packet = enet_packet_create(&outgoing, sizeof(outgoing),
+                                                                ENET_PACKET_FLAG_RELIABLE);
+                        enet_peer_send(event.peer, 0, packet);
+                        enet_host_flush(host.get());
+                        enet_packet_destroy(event.packet);
+                        return true;
+                    }
+                    enet_packet_destroy(event.packet);
+                }
+            }
+        }
+
+        WARN_LOG_FMT(BRAWLBACK, "GekkoNet: host settings exchange timed out");
+        return false;
+    }
+
+    ENetAddress remote_addr{};
+    if (enet_address_set_host(&remote_addr, remote_ip.c_str()) != 0)
+        return false;
+    remote_addr.port = remote_settings_port;
+
+    Common::ENet::ENetHostPtr host(enet_host_create(nullptr, 1, 1, 0, 0));
+    if (!host)
+        return false;
+
+    ENetPeer* peer = enet_host_connect(host.get(), &remote_addr, 1, 0);
+    if (!peer)
+        return false;
+
+    bool sent_settings = false;
+    while (std::chrono::steady_clock::now() < deadline)
+    {
+        ENetEvent event{};
+        while (enet_host_service(host.get(), &event, 10) > 0)
+        {
+            if (event.type == ENET_EVENT_TYPE_CONNECT && !sent_settings)
+            {
+                ENetPacket* packet =
+                    enet_packet_create(&outgoing, sizeof(outgoing), ENET_PACKET_FLAG_RELIABLE);
+                enet_peer_send(peer, 0, packet);
+                enet_host_flush(host.get());
+                sent_settings = true;
+            }
+            else if (event.type == ENET_EVENT_TYPE_RECEIVE)
+            {
+                const auto* incoming =
+                    static_cast<const SettingsPacket*>(static_cast<const void*>(event.packet->data));
+                if (event.packet->dataLength == sizeof(SettingsPacket) &&
+                    incoming->magic == SETTINGS_MAGIC)
+                {
+                    *remote_settings = incoming->settings;
+                    enet_packet_destroy(event.packet);
+                    return true;
+                }
+                enet_packet_destroy(event.packet);
+            }
+            else if (event.type == ENET_EVENT_TYPE_DISCONNECT)
+            {
+                return false;
+            }
+        }
+    }
+
+    WARN_LOG_FMT(BRAWLBACK, "GekkoNet: client settings exchange timed out");
+    return false;
+}
+
+void CEXIBrawlbackGekkoNet::MergeGameSettings(const Match::GameSettings& remote_settings)
+{
+    if (!m_game_settings)
+        return;
+
+    const Match::GameSettings local_settings = *m_game_settings;
+    const bool is_host = m_local_player_idx == 0;
+    const Match::GameSettings& host_settings = is_host ? local_settings : remote_settings;
+    const Match::GameSettings& client_settings = is_host ? remote_settings : local_settings;
+
+    m_game_settings->localPlayerIdx = static_cast<u8>(m_local_player_idx);
+    m_game_settings->numPlayers = 2;
+    m_game_settings->randomSeed = host_settings.randomSeed;
+    m_game_settings->stageID = host_settings.stageID;
+    m_game_settings->playerSettings[0] = host_settings.playerSettings[0];
+    m_game_settings->playerSettings[1] = client_settings.playerSettings[0];
+    m_game_settings->playerSettings[0].playerType =
+        is_host ? Match::PlayerType::PLAYERTYPE_LOCAL : Match::PlayerType::PLAYERTYPE_REMOTE;
+    m_game_settings->playerSettings[1].playerType =
+        is_host ? Match::PlayerType::PLAYERTYPE_REMOTE : Match::PlayerType::PLAYERTYPE_LOCAL;
+}
+
+void CEXIBrawlbackGekkoNet::QueueGameSettingsResponse()
+{
+    if (!m_game_settings)
+        return;
+
+    auto bytes = Mem::structToByteVector(m_game_settings.get());
+    m_read_queue.clear();
+    m_read_queue.push_back(static_cast<u8>(GKK_SETUP_PLAYERS));
+    m_read_queue.insert(m_read_queue.end(), bytes.begin(), bytes.end());
+}
+
 void CEXIBrawlbackGekkoNet::DestroyGekkoSession()
 {
     if (m_session)
@@ -517,6 +680,7 @@ void CEXIBrawlbackGekkoNet::DestroyGekkoSession()
         m_seen_match_frame_zero = false;
         m_connect_wait_ticks = 0;
     }
+    m_local_port = 0;
     gekko_default_adapter_destroy();
 }
 

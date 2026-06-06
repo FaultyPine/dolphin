@@ -78,6 +78,8 @@ private:
     int m_local_handle  = -1;
     int m_remote_handle = -1;
     std::string m_remote_addr_str;
+    unsigned short m_local_port = 0;
+    bool m_enet_initialized = false;
 
     bool m_rb_initialized  = false;
     bool m_session_started = false;
@@ -112,6 +114,9 @@ private:
 
     void InitGekkoSession(const std::string& remote_addr, unsigned short local_port);
     void DestroyGekkoSession();
+    bool ExchangeGameSettings(Match::GameSettings* remote_settings) const;
+    void MergeGameSettings(const Match::GameSettings& remote_settings);
+    void QueueGameSettingsResponse();
 
     // Input injection (dual: SI override + direct memory write)
     void InjectPads(const BrawlbackPad pads[MAX_NUM_PLAYERS]);
