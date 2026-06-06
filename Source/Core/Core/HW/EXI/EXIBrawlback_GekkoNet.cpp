@@ -366,11 +366,22 @@ int CEXIBrawlbackGekkoNet::HandleFrame(u8* payload)
         }
     }
 
+    const auto PauseForLocalAdvantage = [](GekkoSession* session) {
+      // gekko_frames_ahead returns the "local advantage" in frames, i.e. how many frames this
+      // instance is ahead of the peer. local_adv = current_frame - last_received_remote_input_frame
+      // - local_delay ahead > 0: this Dolphin instance is on average ahead of the peer. We should
+      // slow down a bit ahead == 0 : we're synced up ahead < 0 : this instance is behind the peer
+      float ahead = gekko_frames_ahead(session);
+      if (ahead > 0.6f)
+      {
+        std::this_thread::sleep_for(
+            std::chrono::microseconds(static_cast<int>(ahead * GEKKONET_TIMESYNC_EXTRA_US)));
+      }
+    };
+
     if (num_adv == 0)
     {
-        float ahead = gekko_frames_ahead(m_session);
-        if (ahead > 0.5f)
-            std::this_thread::sleep_for(std::chrono::microseconds(static_cast<int>(ahead * 275.0f)));
+        PauseForLocalAdvantage(m_session);
         return 0;
     }
 
@@ -391,9 +402,7 @@ int CEXIBrawlbackGekkoNet::HandleFrame(u8* payload)
     memcpy(m_pending_adv_pads, adv_pads, sizeof(m_pending_adv_pads));
     m_pending_adv_count = num_adv;
 
-    float ahead = gekko_frames_ahead(m_session);
-    if (ahead > 0.6f)
-        std::this_thread::sleep_for(std::chrono::microseconds(static_cast<int>(ahead * 275.0f))); // TODO: Why 275?
+    PauseForLocalAdvantage(m_session);
     return num_adv;
 }
 
@@ -524,6 +533,8 @@ void CEXIBrawlbackGekkoNet::InitGekkoSession(const std::string& remote_addr, uns
                  local_port, remote_addr, m_local_player_idx, m_local_handle, m_remote_handle);
 }
 
+// TODO: gekko uses asio by default, but I know how to use enet a little better, so i opted for that here.
+// In the future, we should make an enet "adapter" for gekkonet to use instead of asio - which could simplify this code a bit (use the same stuff the gekko adapter uses)
 bool CEXIBrawlbackGekkoNet::ExchangeGameSettings(Match::GameSettings* remote_settings) const
 {
     if (!remote_settings || !m_game_settings || !m_enet_initialized || m_remote_addr_str.empty() ||
