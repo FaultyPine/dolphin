@@ -81,14 +81,13 @@ private:
 
     bool m_rb_initialized  = false;
     bool m_session_started = false;
+    bool m_seen_match_frame_zero = false;
     int  m_local_player_idx = 0;
     u8   m_num_players      = 2;
     bool m_is_host          = true;
     int  m_current_frame    = 0;
     int  m_connect_wait_ticks = 0;
     int  m_pending_adv_count = 0;
-    int  m_loop_hook_ticks = 0;
-    int  m_callsite_hook_ticks = 0;
     BrawlbackPad m_pending_adv_pads[MAX_ROLLBACK_FRAMES + 1][MAX_NUM_PLAYERS]{};
     std::unique_ptr<Match::GameSettings> m_game_settings;
 

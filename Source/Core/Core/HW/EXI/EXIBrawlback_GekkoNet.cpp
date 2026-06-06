@@ -121,13 +121,6 @@ void CEXIBrawlbackGekkoNet::RunDolphinControlledGameLoop(const Core::CPUThreadGu
     auto& ppc_state = guard.GetSystem().GetPPCState();
     s_override_active = false;
     const int adv_count = HandleFrame(nullptr);
-    if (++m_loop_hook_ticks <= 10 || (m_loop_hook_ticks % 60) == 0)
-    {
-        INFO_LOG_FMT(BRAWLBACK,
-                     "GekkoNet: loop hook frame={} adv={} session={} r23={:08x} r24_before={} r19_before={}",
-                     m_current_frame, adv_count, m_session_started, ppc_state.gpr[23], ppc_state.gpr[24],
-                     ppc_state.gpr[19]);
-    }
     ppc_state.gpr[25] = 0;
     ppc_state.gpr[19] = 0;
     ppc_state.gpr[24] = static_cast<u32>(adv_count);
@@ -150,13 +143,6 @@ void CEXIBrawlbackGekkoNet::RunGameProcCallsiteHook(const Core::CPUThreadGuard& 
 {
     auto& ppc_state = guard.GetSystem().GetPPCState();
     const int resim_index = static_cast<int>(ppc_state.gpr[19]);
-    if (++m_callsite_hook_ticks <= 10 || (m_callsite_hook_ticks % 60) == 0)
-    {
-        INFO_LOG_FMT(BRAWLBACK,
-                     "GekkoNet: gameProc callsite hit index={} count={} frame={} r23={:08x} lr={:08x}",
-                     resim_index, m_pending_adv_count, m_current_frame, ppc_state.gpr[23],
-                     ppc_state.spr[SPR_LR]);
-    }
 
     if (resim_index >= 0 && resim_index < m_pending_adv_count)
     {
@@ -271,57 +257,71 @@ int CEXIBrawlbackGekkoNet::HandleFrame(u8* payload)
         return 1;
     }
 
-    const bool gameplay_frame = frame > 0;
-    if (m_session_started && gameplay_frame)
-        gekko_add_local_input(m_session, m_local_handle, &p->pad);
-
     int gc = 0;
-    auto** ge = gekko_update_session(m_session, &gc);
+    GekkoGameEvent** ge = nullptr;
 
-    int sc = 0;
-    auto** se = gekko_session_events(m_session, &sc);
-    for (int i = 0; i < sc; i++)
+    const bool brawl_frame_started = frame > 0;
+    if (!m_session_started)
     {
-        switch (se[i]->type)
+        ge = gekko_update_session(m_session, &gc);
+
+        int sc = 0;
+        auto** se = gekko_session_events(m_session, &sc);
+        for (int i = 0; i < sc; i++)
         {
-        case GekkoPlayerSyncing:
-            INFO_LOG_FMT(BRAWLBACK, "GekkoNet: player {} syncing {}/{}",
-                         se[i]->data.syncing.handle, se[i]->data.syncing.current,
-                         se[i]->data.syncing.max);
-            break;
-        case GekkoPlayerConnected:
-            INFO_LOG_FMT(BRAWLBACK, "GekkoNet: player {} connected", se[i]->data.connected.handle);
-            break;
-        case GekkoSessionStarted:
-            m_session_started = true;
-            m_connect_wait_ticks = 0;
-            INFO_LOG_FMT(BRAWLBACK, "GekkoNet: session started");
-            break;
-        case GekkoPlayerDisconnected:
-            WARN_LOG_FMT(BRAWLBACK, "GekkoNet: player {} disconnected",
-                         se[i]->data.disconnected.handle);
-            return 0;
-        case GekkoDesyncDetected:
-            WARN_LOG_FMT(BRAWLBACK, "GekkoNet: desync frame {}", se[i]->data.desynced.frame);
-            break;
-        default:
-            break;
+            switch (se[i]->type)
+            {
+            case GekkoPlayerSyncing:
+                INFO_LOG_FMT(BRAWLBACK, "GekkoNet: player {} syncing {}/{}",
+                             se[i]->data.syncing.handle, se[i]->data.syncing.current,
+                             se[i]->data.syncing.max);
+                break;
+            case GekkoPlayerConnected:
+                INFO_LOG_FMT(BRAWLBACK, "GekkoNet: player {} connected", se[i]->data.connected.handle);
+                break;
+            case GekkoSessionStarted:
+                m_session_started = true;
+                m_connect_wait_ticks = 0;
+                INFO_LOG_FMT(BRAWLBACK, "GekkoNet: session started");
+                break;
+            case GekkoPlayerDisconnected:
+                WARN_LOG_FMT(BRAWLBACK, "GekkoNet: player {} disconnected",
+                             se[i]->data.disconnected.handle);
+                return 0;
+            case GekkoDesyncDetected:
+                WARN_LOG_FMT(BRAWLBACK, "GekkoNet: desync frame {}", se[i]->data.desynced.frame);
+                break;
+            default:
+                break;
+            }
         }
     }
+
     if (!m_session_started)
     {
         if (++m_connect_wait_ticks % 120 == 0)
             INFO_LOG_FMT(BRAWLBACK, "GekkoNet: waiting for session start remote={} local_handle={} remote_handle={}",
                          m_remote_addr_str, m_local_handle, m_remote_handle);
-        return gameplay_frame ? 0 : 1;
+        return brawl_frame_started ? 0 : 1;
     }
 
-    if (!gameplay_frame)
+    if (!m_seen_match_frame_zero)
     {
-        if ((m_loop_hook_ticks % 120) == 0)
-            INFO_LOG_FMT(BRAWLBACK, "GekkoNet: pass-through pre-gameplay frame={}", frame);
+        gekko_network_poll(m_session);
+        if (frame == 0)
+            m_seen_match_frame_zero = true;
         return 1;
     }
+
+    if (!brawl_frame_started)
+    {
+        gekko_network_poll(m_session);
+        return 1;
+    }
+
+    gekko_add_local_input(m_session, m_local_handle, &p->pad);
+
+    ge = gekko_update_session(m_session, &gc);
 
     bool has_load   = false;
     int  load_frame = 0;
@@ -460,8 +460,6 @@ void CEXIBrawlbackGekkoNet::HandleEndMatch()
     m_rb_initialized = false;
     m_current_frame = 0;
     m_pending_adv_count = 0;
-    m_loop_hook_ticks = 0;
-    m_callsite_hook_ticks = 0;
     m_game_settings.reset();
     DestroyGekkoSession();
 }
@@ -516,6 +514,7 @@ void CEXIBrawlbackGekkoNet::DestroyGekkoSession()
         gekko_destroy(&m_session);
         m_session = nullptr;
         m_session_started = false;
+        m_seen_match_frame_zero = false;
         m_connect_wait_ticks = 0;
     }
     gekko_default_adapter_destroy();
