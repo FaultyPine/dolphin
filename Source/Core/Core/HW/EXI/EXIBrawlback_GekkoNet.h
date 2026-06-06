@@ -45,14 +45,10 @@ struct GKKFramePayload
 #pragma pack(pop)
 
 // Brawl addresses
-static constexpr u32 BRAWL_GAMEPROC_ADDR      = 0x80017618;
 static constexpr u32 BRAWL_GAME_LOOP_HOOK_ADDR = 0x80017344;
-static constexpr u32 BRAWL_GAME_LOOP_AFTER_ADDR = 0x800173ac;
-static constexpr u32 BRAWL_PPC_CALL_RETURN_ADDR = BRAWL_GAME_LOOP_AFTER_ADDR;
-static constexpr u32 BRAWL_CLEAR_PAD_EDGE_REPERT_ADDR = 0x8002b62c;
-static constexpr u32 BRAWL_GF_APPLICATION_PTR  = 0x8059ffac;
-static constexpr u32 BRAWL_GAME_FRAME_PTR       = 0x901812a0;
-static constexpr u32 BRAWL_PERSISTENT_FRAME_COUNTER_OFF = 0x14;
+static constexpr u32 BRAWL_GAME_LOOP_CONDITION_ADDR = 0x800173a4;
+static constexpr u32 BRAWL_GAMEPROC_CALLSITE_ADDR = 0x80017350;
+static constexpr u32 BRAWL_GAMEPROC_CALLSITE_NEXT_ADDR = 0x80017354;
 // gfPadSystem instance at 0x805bacc0, raw pads at +0x40, stride 0x40
 static constexpr u32 BRAWL_PADSYSTEM_INSTANCE  = 0x805bacc0;
 static constexpr u32 BRAWL_PAD_RAW_BASE = BRAWL_PADSYSTEM_INSTANCE + 0x40;
@@ -75,6 +71,7 @@ public:
     // SI override — called from CSIDevice_GCController::GetPadStatus
     static bool GetOverrideInput(int pad_num, GCPadStatus* status);
     static void GameLoopHook(const Core::CPUThreadGuard& guard);
+    static void GameProcCallsiteHook(const Core::CPUThreadGuard& guard);
 
 private:
     std::vector<u8> m_read_queue;
@@ -91,6 +88,10 @@ private:
     bool m_is_host          = true;
     int  m_current_frame    = 0;
     int  m_connect_wait_ticks = 0;
+    int  m_pending_adv_count = 0;
+    int  m_loop_hook_ticks = 0;
+    int  m_callsite_hook_ticks = 0;
+    BrawlbackPad m_pending_adv_pads[MAX_ROLLBACK_FRAMES + 1][MAX_NUM_PLAYERS]{};
     std::unique_ptr<Match::GameSettings> m_game_settings;
 
     std::unique_ptr<Matchmaking> m_matchmaking;
@@ -103,9 +104,10 @@ private:
     static inline GCPadStatus s_override_pads[MAX_NUM_PLAYERS]{};
 
     // Handlers
-    void HandleFrame(u8* payload);
+    int HandleFrame(u8* payload);
     bool ShouldControlGameLoop() const;
     void RunDolphinControlledGameLoop(const Core::CPUThreadGuard& guard);
+    void RunGameProcCallsiteHook(const Core::CPUThreadGuard& guard);
     void HandleFindOpponent(u8* payload);
     void HandleStartMatch(u8* payload);
     void HandleEndMatch();
@@ -113,11 +115,6 @@ private:
 
     void InitGekkoSession(const std::string& remote_addr, unsigned short local_port);
     void DestroyGekkoSession();
-
-    // PPC calling
-    void RunPPCFunction(u32 addr, u32 r3 = 0, u32 r4 = 0);
-    void RunGameProc(int resim_index);
-    void RunClearPadEdgeRepert();
 
     // Input injection (dual: SI override + direct memory write)
     void InjectPads(const BrawlbackPad pads[MAX_NUM_PLAYERS]);

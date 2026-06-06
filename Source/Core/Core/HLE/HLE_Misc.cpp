@@ -85,4 +85,9 @@ void BrawlbackGekkoNetGameLoop(const Core::CPUThreadGuard& guard)
 {
   CEXIBrawlbackGekkoNet::GameLoopHook(guard);
 }
+
+void BrawlbackGekkoNetGameProcCallsite(const Core::CPUThreadGuard& guard)
+{
+  CEXIBrawlbackGekkoNet::GameProcCallsiteHook(guard);
+}
 }  // namespace HLE_Misc

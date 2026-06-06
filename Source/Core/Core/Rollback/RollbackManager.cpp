@@ -21,16 +21,17 @@
 namespace Rollback
 {
 
-// Brawlback's GAME_FRAME->persistentFrameCounter: 0x901812a0 + 0x14 = 0x901812b4 (MEM2).
-// MEM2 physical base is 0x10000000, so the byte offset within MEM2 is 0x001812b4.
-static constexpr uint32_t BRAWL_FRAME_COUNTER_MEM2_OFFSET = 0x001812b4u;
+// Brawl's GameFrame::frameCounter at 0x901812a4 (MEM2). This resets when the
+// match scene starts and advances inside the real game loop.
+static constexpr uint32_t BRAWL_GAME_FRAME_COUNTER_MEM2_OFFSET = 0x001812a4u;
 
-uint32_t ReadBrawlFrameCounter(const uint8_t* mem2_ptr, size_t mem2_size)
+uint32_t ReadBrawlMatchFrameCounter(const uint8_t* mem2_ptr, size_t mem2_size)
 {
-  if (!mem2_ptr || BRAWL_FRAME_COUNTER_MEM2_OFFSET + 4 > mem2_size)
+  if (!mem2_ptr || BRAWL_GAME_FRAME_COUNTER_MEM2_OFFSET + 4 > mem2_size)
     return 0;
+
   uint32_t raw;
-  std::memcpy(&raw, mem2_ptr + BRAWL_FRAME_COUNTER_MEM2_OFFSET, sizeof(raw));
+  std::memcpy(&raw, mem2_ptr + BRAWL_GAME_FRAME_COUNTER_MEM2_OFFSET, sizeof(raw));
   return Common::swap32(raw);
 }
 
@@ -47,7 +48,7 @@ void RollbackManager::CaptureFullRamSnapshot(RollbackSnapshot& snap)
     std::memcpy(snap.mem2.get(), m_mem2_ptr, m_mem2_size);
   }
 
-  snap.brawl_frame = ReadBrawlFrameCounter(m_mem2_ptr, m_mem2_size);
+  snap.brawl_frame = ReadBrawlMatchFrameCounter(m_mem2_ptr, m_mem2_size);
   snap.valid = true;
 }
 
@@ -115,7 +116,7 @@ void RollbackManager::CompareValSnapshot(int target_slot, int frames_back) const
     }
   }
 
-  const uint32_t current_brawl_frame = ReadBrawlFrameCounter(m_mem2_ptr, m_mem2_size);
+  const uint32_t current_brawl_frame = ReadBrawlMatchFrameCounter(m_mem2_ptr, m_mem2_size);
   const bool frame_ok = (current_brawl_frame == snap.brawl_frame);
   const char* frame_tag = frame_ok ? "frame_ok" : "FRAME_MISMATCH";
 

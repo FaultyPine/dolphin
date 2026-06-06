@@ -15,4 +15,5 @@ void HBReload(const Core::CPUThreadGuard& guard);
 void GeckoCodeHandlerICacheFlush(const Core::CPUThreadGuard& guard);
 void GeckoReturnTrampoline(const Core::CPUThreadGuard& guard);
 void BrawlbackGekkoNetGameLoop(const Core::CPUThreadGuard& guard);
+void BrawlbackGekkoNetGameProcCallsite(const Core::CPUThreadGuard& guard);
 }  // namespace HLE_Misc
