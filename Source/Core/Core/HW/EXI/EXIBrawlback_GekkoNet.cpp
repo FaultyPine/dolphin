@@ -440,13 +440,13 @@ void CEXIBrawlbackGekkoNet::HandleStartMatch(u8* payload)
         *reinterpret_cast<Match::GameSettings*>(payload));
     m_num_players = m_game_settings->numPlayers;
     if (m_num_players == 0) m_num_players = 2;
+    HandleFindOpponent(nullptr);
     m_game_settings->localPlayerIdx = static_cast<u8>(m_local_player_idx);
     auto bytes = Mem::structToByteVector(m_game_settings.get());
     m_read_queue.clear();
     m_read_queue.push_back(static_cast<u8>(GKK_SETUP_PLAYERS));
     m_read_queue.insert(m_read_queue.end(), bytes.begin(), bytes.end());
     INFO_LOG_FMT(BRAWLBACK, "GekkoNet: CPU core {}", m_system.GetPowerPC().GetCPUName());
-    HandleFindOpponent(nullptr);
 }
 
 void CEXIBrawlbackGekkoNet::HandleEndMatch()
