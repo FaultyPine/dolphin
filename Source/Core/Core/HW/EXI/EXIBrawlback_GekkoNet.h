@@ -28,8 +28,6 @@ class CPUThreadGuard;
 enum GekkoNetCmd : u8
 {
     GKK_CMD_UNKNOWN   = 0,
-    GKK_CMD_FRAME     = 20,
-    GKK_FIND_OPPONENT = 5,
     GKK_END_MATCH     = 11,
     GKK_START_MATCH   = 13,
     GKK_SETUP_PLAYERS = 14,

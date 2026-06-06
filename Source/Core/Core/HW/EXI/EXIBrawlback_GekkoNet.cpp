@@ -58,8 +58,6 @@ void CEXIBrawlbackGekkoNet::DMAWrite(u32 address, u32 size)
     u8* payload = size > 1 ? &mem[1] : nullptr;
     switch (cmd)
     {
-    case GKK_CMD_FRAME:       HandleFrame(payload);           break;
-    case GKK_FIND_OPPONENT:   HandleFindOpponent(payload);    break;
     case GKK_END_MATCH:       HandleEndMatch();               break;
     case GKK_START_MATCH:     HandleStartMatch(payload);      break;
     case GKK_REG_EXCLUDE:     HandleRegisterExclude(payload); break;
@@ -448,6 +446,7 @@ void CEXIBrawlbackGekkoNet::HandleStartMatch(u8* payload)
     m_read_queue.push_back(static_cast<u8>(GKK_SETUP_PLAYERS));
     m_read_queue.insert(m_read_queue.end(), bytes.begin(), bytes.end());
     INFO_LOG_FMT(BRAWLBACK, "GekkoNet: CPU core {}", m_system.GetPowerPC().GetCPUName());
+    HandleFindOpponent(nullptr);
 }
 
 void CEXIBrawlbackGekkoNet::HandleEndMatch()
@@ -506,7 +505,7 @@ void CEXIBrawlbackGekkoNet::InitGekkoSession(const std::string& remote_addr, uns
     gekko_set_local_delay(m_session, m_local_handle, FRAME_DELAY);
     m_connect_wait_ticks = 0;
     INFO_LOG_FMT(BRAWLBACK,
-                 "GekkoNet: init port={} remote={} local_player={} local_handle={} remote_handle={}",
+                 "GekkoNet session init: init port={} remote={} local_player={} local_handle={} remote_handle={}",
                  local_port, remote_addr, m_local_player_idx, m_local_handle, m_remote_handle);
 }
 
