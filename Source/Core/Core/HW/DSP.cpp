@@ -505,6 +505,8 @@ void DSPManager::Do_ARAM_DMA()
     }
     else if (!m_aram.wii_mode)
     {
+      const u32 mm_addr = m_aram_dma.MMAddr;
+      const u32 byte_count = m_aram_dma.Cnt.count;
       auto* mm_ptr = memory.GetPointerForRange(m_aram_dma.MMAddr, m_aram_dma.Cnt.count);
       if (mm_ptr != nullptr)
       {
@@ -519,6 +521,7 @@ void DSPManager::Do_ARAM_DMA()
           m_aram_dma.Cnt.count -= HSP::TRANSFER_SIZE;
           mm_ptr += HSP::TRANSFER_SIZE;
         }
+        memory.MarkRangeDirty(mm_addr, byte_count);
       }
     }
   }
