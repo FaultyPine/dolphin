@@ -90,4 +90,9 @@ void BrawlbackGekkoNetGameProcCallsite(const Core::CPUThreadGuard& guard)
 {
   CEXIBrawlbackGekkoNet::GameProcCallsiteHook(guard);
 }
+
+void BrawlbackGekkoNetClearPadEdgeCallsite(const Core::CPUThreadGuard& guard)
+{
+  CEXIBrawlbackGekkoNet::ClearPadEdgeCallsiteHook(guard);
+}
 }  // namespace HLE_Misc
