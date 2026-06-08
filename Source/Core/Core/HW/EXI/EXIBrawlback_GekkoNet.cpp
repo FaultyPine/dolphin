@@ -46,6 +46,7 @@ CEXIBrawlbackGekkoNet::~CEXIBrawlbackGekkoNet()
         s_active_device = nullptr;
     HLE::UnPatch(m_system, "BrawlbackGekkoNetGameLoop");
     HLE::UnPatch(m_system, "BrawlbackGekkoNetGameProcCallsite");
+    HLE::UnPatch(m_system, "BrawlbackGekkoNetClearPadEdgeCallsite");
     s_override_active = false;
     DestroyGekkoSession();
     if (m_matchmaking_thread.joinable())
@@ -165,6 +166,23 @@ void CEXIBrawlbackGekkoNet::RunGameProcCallsiteHook(const Core::CPUThreadGuard& 
 
     ppc_state.gpr[3] = ppc_state.gpr[23];  // original 0x80017350: or r3, r23, r23
     ppc_state.npc = BRAWL_GAMEPROC_CALLSITE_NEXT_ADDR;
+}
+
+void CEXIBrawlbackGekkoNet::ClearPadEdgeCallsiteHook(const Core::CPUThreadGuard& guard)
+{
+    if (!s_active_device || !s_active_device->ShouldControlGameLoop())
+    {
+        auto& ppc_state = guard.GetSystem().GetPPCState();
+        ppc_state.gpr[3] = ppc_state.gpr[26];  // original 0x80017370: or r3, r26, r26
+        ppc_state.npc = BRAWL_CLEAR_PAD_EDGE_CALL_ADDR;
+        return;
+    }
+    s_active_device->RunClearPadEdgeCallsiteHook(guard);
+}
+
+void CEXIBrawlbackGekkoNet::RunClearPadEdgeCallsiteHook(const Core::CPUThreadGuard& guard)
+{
+    guard.GetSystem().GetPPCState().npc = BRAWL_CLEAR_PAD_EDGE_CALL_NEXT_ADDR;
 }
 
 // ---- Input injection ----
@@ -471,6 +489,8 @@ void CEXIBrawlbackGekkoNet::HandleStartMatch(u8* payload)
     if (!payload) return;
     HLE::Patch(m_system, BRAWL_GAME_LOOP_HOOK_ADDR, "BrawlbackGekkoNetGameLoop");
     HLE::Patch(m_system, BRAWL_GAMEPROC_CALLSITE_ADDR, "BrawlbackGekkoNetGameProcCallsite");
+    HLE::Patch(m_system, BRAWL_CLEAR_PAD_EDGE_CALLSITE_ADDR,
+               "BrawlbackGekkoNetClearPadEdgeCallsite");
     INFO_LOG_FMT(BRAWLBACK, "GekkoNet: patched mainLoopSub gameProc loop hooks");
 
     m_game_settings = std::make_unique<Match::GameSettings>(
@@ -492,6 +512,7 @@ void CEXIBrawlbackGekkoNet::HandleEndMatch()
     INFO_LOG_FMT(BRAWLBACK, "GekkoNet: end match");
     HLE::UnPatch(m_system, "BrawlbackGekkoNetGameLoop");
     HLE::UnPatch(m_system, "BrawlbackGekkoNetGameProcCallsite");
+    HLE::UnPatch(m_system, "BrawlbackGekkoNetClearPadEdgeCallsite");
     INFO_LOG_FMT(BRAWLBACK, "GekkoNet: unpatched mainLoopSub gameProc loop hooks");
 
     s_override_active = false;

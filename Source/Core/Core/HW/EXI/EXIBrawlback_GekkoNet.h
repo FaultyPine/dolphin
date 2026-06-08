@@ -47,6 +47,9 @@ static constexpr u32 BRAWL_GAME_LOOP_HOOK_ADDR = 0x80017344;
 static constexpr u32 BRAWL_GAME_LOOP_CONDITION_ADDR = 0x800173a4;
 static constexpr u32 BRAWL_GAMEPROC_CALLSITE_ADDR = 0x80017350;
 static constexpr u32 BRAWL_GAMEPROC_CALLSITE_NEXT_ADDR = 0x80017354;
+static constexpr u32 BRAWL_CLEAR_PAD_EDGE_CALLSITE_ADDR = 0x80017370;
+static constexpr u32 BRAWL_CLEAR_PAD_EDGE_CALL_ADDR = 0x80017374;
+static constexpr u32 BRAWL_CLEAR_PAD_EDGE_CALL_NEXT_ADDR = 0x80017378;
 // gfPadSystem instance at 0x805bacc0, raw pads at +0x40, stride 0x40
 static constexpr u32 BRAWL_PADSYSTEM_INSTANCE  = 0x805bacc0;
 static constexpr u32 BRAWL_PAD_RAW_BASE = BRAWL_PADSYSTEM_INSTANCE + 0x40;
@@ -76,6 +79,7 @@ public:
     static bool GetOverrideInput(int pad_num, GCPadStatus* status);
     static void GameLoopHook(const Core::CPUThreadGuard& guard);
     static void GameProcCallsiteHook(const Core::CPUThreadGuard& guard);
+    static void ClearPadEdgeCallsiteHook(const Core::CPUThreadGuard& guard);
 
 private:
     std::vector<u8> m_read_queue;
@@ -113,6 +117,7 @@ private:
     bool ShouldControlGameLoop() const;
     void RunDolphinControlledGameLoop(const Core::CPUThreadGuard& guard);
     void RunGameProcCallsiteHook(const Core::CPUThreadGuard& guard);
+    void RunClearPadEdgeCallsiteHook(const Core::CPUThreadGuard& guard);
     void HandleFindOpponent(u8* payload);
     void HandleStartMatch(u8* payload);
     void HandleEndMatch();
