@@ -524,6 +524,7 @@ void CEXIMemoryCard::DMARead(u32 addr, u32 size)
 {
   auto& memory = m_system.GetMemory();
   m_memory_card->Read(m_address, size, memory.GetPointerForRange(addr, size));
+  memory.MarkRangeDirty(addr, size);
 
   if ((m_address + size) % Memcard::BLOCK_SIZE == 0)
   {

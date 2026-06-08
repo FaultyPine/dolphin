@@ -190,6 +190,7 @@ void CEXIModem::DMARead(u32 addr, u32 size)
   {
     auto& memory = m_system.GetMemory();
     HandleReadModemTransfer(memory.GetPointerForRange(addr, size), size);
+    memory.MarkRangeDirty(addr, size);
   }
 }
 
