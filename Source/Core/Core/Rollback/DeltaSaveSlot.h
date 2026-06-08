@@ -25,11 +25,12 @@ struct MemoryRegion
 {
   uint32_t phys_start = 0;  // virt_addr & 0x1FFF'FFFFu
   uint32_t phys_end = 0;    // phys_start + size
+  const char* name = nullptr;
 
-  static MemoryRegion FromVirt(uint32_t virt_addr, uint32_t size_bytes)
+  static MemoryRegion FromVirt(uint32_t virt_addr, uint32_t size_bytes, const char* name = nullptr)
   {
     const uint32_t phys = virt_addr & 0x1FFF'FFFFu;
-    return {phys, phys + size_bytes};
+    return {phys, phys + size_bytes, name};
   }
 };
 
@@ -39,20 +40,26 @@ struct MemoryRegionThroughPtrs : public MemoryRegion
   std::vector<uint32_t> pointer_offsets;
   uint32_t final_data_size;
 
-  static MemoryRegionThroughPtrs FromVirt(uint32_t virt_addr, uint32_t size_bytes)
-  {
-    const uint32_t phys = virt_addr & 0x1FFF'FFFFu;
-    return {phys, phys + size_bytes};
-  }
-
-  static MemoryRegionThroughPtrs FromPtrs(uint32_t virt_addr,
-                                          std::initializer_list<uint32_t> offsets,
-                                          uint32_t data_size)
+  static MemoryRegionThroughPtrs FromVirt(uint32_t virt_addr, uint32_t size_bytes,
+                                          const char* name = nullptr)
   {
     const uint32_t phys = virt_addr & 0x1FFF'FFFFu;
     MemoryRegionThroughPtrs r{};
     r.phys_start = phys;
-    r.phys_end = phys;
+    r.phys_end = phys + size_bytes;
+    r.name = name;
+    return r;
+  }
+
+  static MemoryRegionThroughPtrs FromPtrs(uint32_t virt_addr,
+                                          std::initializer_list<uint32_t> offsets,
+                                          uint32_t data_size, const char* name = nullptr)
+  {
+    const uint32_t phys = virt_addr & 0x1FFF'FFFFu;
+    MemoryRegionThroughPtrs r{};
+    r.phys_start = phys;
+    r.phys_end = phys + data_size;
+    r.name = name;
     r.base_virt_addr = virt_addr;
     r.pointer_offsets = offsets;
     r.final_data_size = data_size;
@@ -91,12 +98,12 @@ struct MemoryRegionThroughPtrs : public MemoryRegion
     {
       uint32_t deref = ResolvePointer(current_phys, mem1_ptr, mem1_size, mem2_ptr, mem2_size);
       if (deref == 0)
-        return {0, 0};
+        return {0, 0, name};
 
       current_phys = (deref + pointer_offsets[i]) & 0x1FFF'FFFFu;
     }
 
-    return MemoryRegion::FromVirt(current_phys, final_data_size);
+    return MemoryRegion::FromVirt(current_phys, final_data_size, name);
   }
 };
 

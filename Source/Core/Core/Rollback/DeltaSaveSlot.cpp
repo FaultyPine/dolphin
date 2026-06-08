@@ -122,6 +122,7 @@ void DeltaSaveSlot::Init(uint8_t* mem1_ptr, size_t mem1_size,
 void DeltaSaveSlot::Reset()
 {
   m_has_state = false;
+  brawl_frame = 0;
   m_mem1_delta.Reset();
   m_mem2_delta.Reset();
   m_save_buffer.reset();

@@ -16,7 +16,7 @@
 #include "job.h"
 
 // Set to 1 to enable full-RAM shadow snapshots for rollback validation
-#define ROLLBACK_VALIDATE 0
+#define ROLLBACK_VALIDATE DEV_DESYNC_MODE
 
 namespace Core
 {

@@ -23,8 +23,11 @@
 #include "Core/Brawlback/include/json.hpp"
 using json = nlohmann::json;
 
+#include <algorithm>
 #include <chrono>
 #include <cstring>
+#include <fstream>
+#include <limits>
 #include <thread>
 
 // ---- Construction / Destruction ----
@@ -152,16 +155,16 @@ void CEXIBrawlbackGekkoNet::RunGameProcCallsiteHook(const Core::CPUThreadGuard& 
     auto& ppc_state = guard.GetSystem().GetPPCState();
     const int resim_index = static_cast<int>(ppc_state.gpr[19]);
 
-    if (resim_index >= 0 && resim_index < m_pending_adv_count)
+    if (resim_index >= 0 && resim_index < m_pending_ops.adv_count)
     {
         if (m_rb_initialized && resim_index > 0)
             Rollback::RollbackManager::Get().SaveFrame(m_system);
-        InjectPads(m_pending_adv_pads[resim_index]);
+        InjectPads(m_pending_ops.adv_pads[resim_index]);
     }
-    else if (m_pending_adv_count > 0)
+    else if (m_pending_ops.adv_count > 0)
     {
         WARN_LOG_FMT(BRAWLBACK, "GekkoNet: gameProc callsite without pending input index={} count={}",
-                     resim_index, m_pending_adv_count);
+                     resim_index, m_pending_ops.adv_count);
     }
 
     ppc_state.gpr[3] = ppc_state.gpr[23];  // original 0x80017350: or r3, r23, r23
@@ -268,7 +271,7 @@ GKKFramePayload CEXIBrawlbackGekkoNet::ReadFramePayloadFromGameMemory() const
 
 int CEXIBrawlbackGekkoNet::HandleFrame(u8* payload)
 {
-    m_pending_adv_count = 0;
+    m_pending_ops.Clear();
     GKKFramePayload local_payload = payload ? *reinterpret_cast<GKKFramePayload*>(payload) :
                                              ReadFramePayloadFromGameMemory();
     auto* p = &local_payload;
@@ -316,14 +319,14 @@ int CEXIBrawlbackGekkoNet::HandleFrame(u8* payload)
                              se[i]->data.disconnected.handle);
                 return false;
             case GekkoDesyncDetected:
-                if (se[i]->data.desynced.frame < GAME_FULL_START_FRAME)
+                if (se[i]->data.desynced.frame <= GAME_FULL_START_FRAME)
                     break;
                 WARN_LOG_FMT(BRAWLBACK,
                              "GekkoNet: desync frame={} remote={} local_checksum={:08x} remote_checksum={:08x}",
                              se[i]->data.desynced.frame, se[i]->data.desynced.remote_handle,
                              se[i]->data.desynced.local_checksum,
                              se[i]->data.desynced.remote_checksum);
-                break;
+                return false;
             default:
                 break;
             }
@@ -358,10 +361,23 @@ int CEXIBrawlbackGekkoNet::HandleFrame(u8* payload)
     if (!brawl_frame_started)
     {
         gekko_network_poll(m_session);
+        if (!process_session_events())
+            return 0;
         return 1;
     }
 
     const bool rollback_ready = frame >= GAME_FULL_START_FRAME;
+    if (!rollback_ready)
+    {
+        gekko_network_poll(m_session);
+        if (!process_session_events())
+            return 0;
+        return 1;
+    }
+
+    if (frame == GAME_FULL_START_FRAME)
+        INFO_LOG_FMT(BRAWLBACK, "GekkoNet: starting gameplay sync at brawl frame {}", frame);
+
     gekko_add_local_input(m_session, m_local_handle, &p->pad);
 
     ge = gekko_update_session(m_session, &gc);
@@ -373,16 +389,18 @@ int CEXIBrawlbackGekkoNet::HandleFrame(u8* payload)
     int  num_adv    = 0;
     BrawlbackPad adv_pads[MAX_ROLLBACK_FRAMES + 1][MAX_NUM_PLAYERS] = {};
 
+    // NOTE: because I wasn't able to figure out how to call brawl's gameProc from dolphin without things blowing up (interrupts in nested JIT calls i think was the trigger)
+    // we instead opt to do this sort of thing, where any gekkonet messages get queued up to be serviced later during our hooks
     for (int i = 0; i < gc; i++)
     {
         auto& e = *ge[i];
         switch (e.type)
         {
         case GekkoSaveEvent:
+            if (e.data.save.state_len)
             *e.data.save.state_len = sizeof(u32);
-            *e.data.save.checksum  = rollback_ready ?
-                                          Rollback::CalculateBrawlbackDesyncChecksum(m_system) :
-                                          0;
+            if (e.data.save.checksum)
+                *e.data.save.checksum = 0;
             break;
         case GekkoLoadEvent:
             ASSERT(!has_load);
@@ -391,7 +409,12 @@ int CEXIBrawlbackGekkoNet::HandleFrame(u8* payload)
             break;
         case GekkoAdvanceEvent:
             if (num_adv < MAX_ROLLBACK_FRAMES + 1)
-                ExtractPads(e.data.adv.inputs, adv_pads[num_adv++]);
+            {
+                ExtractPads(e.data.adv.inputs, adv_pads[num_adv]);
+                m_pending_ops.adv_frames[num_adv] = static_cast<u32>(e.data.adv.frame);
+                m_pending_ops.adv_rollback[num_adv] = e.data.adv.rolling_back;
+                num_adv++;
+            }
             break;
         default: break;
         }
@@ -419,19 +442,21 @@ int CEXIBrawlbackGekkoNet::HandleFrame(u8* payload)
     if (rollback_ready && m_rb_initialized)
         rbMgr.SaveFrame(m_system);
 
-    if (rollback_ready && has_load)
+    if (has_load)
     {
-        int frames_back = m_current_frame - load_frame - 1;
+        const int frames_back =
+            num_adv > 0 ? static_cast<int>(m_pending_ops.adv_frames[num_adv - 1]) - load_frame - 1 : 0;
         if (frames_back >= 1 && frames_back <= MAX_ROLLBACK_FRAMES &&
             m_rb_initialized && rbMgr.m_ring_count >= 2 && frames_back < rbMgr.m_ring_count)
         {
-            INFO_LOG_FMT(BRAWLBACK, "GekkoNet: rollback frames_back={} resim={}", frames_back, num_adv);
+            INFO_LOG_FMT(BRAWLBACK, "GekkoNet: rollback frames_back={} load_frame={} last_adv={} resim={}",
+                         frames_back, load_frame, m_pending_ops.adv_frames[num_adv - 1], num_adv);
             rbMgr.LoadFrame(m_system, frames_back);
         }
     }
 
-    memcpy(m_pending_adv_pads, adv_pads, sizeof(m_pending_adv_pads));
-    m_pending_adv_count = num_adv;
+    memcpy(m_pending_ops.adv_pads, adv_pads, sizeof(m_pending_ops.adv_pads));
+    m_pending_ops.adv_count = num_adv;
 
     PauseForLocalAdvantage(m_session);
     return num_adv;
@@ -518,7 +543,7 @@ void CEXIBrawlbackGekkoNet::HandleEndMatch()
     s_override_active = false;
     m_rb_initialized = false;
     m_current_frame = 0;
-    m_pending_adv_count = 0;
+    m_pending_ops.Clear();
     m_game_settings.reset();
     DestroyGekkoSession();
 }
@@ -544,7 +569,7 @@ void CEXIBrawlbackGekkoNet::InitGekkoSession(const std::string& remote_addr, uns
     cfg.state_size              = sizeof(u32);
     cfg.input_prediction_window = static_cast<unsigned char>(MAX_ROLLBACK_FRAMES);
     cfg.max_spectators          = 0;
-    cfg.desync_detection        = true;
+    cfg.desync_detection        = DEV_DESYNC_MODE;
     cfg.limited_saving          = false;
     gekko_start(m_session, &cfg);
     gekko_net_adapter_set(m_session, gekko_default_adapter(local_port));

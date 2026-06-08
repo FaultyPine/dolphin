@@ -11,6 +11,7 @@
 #include "gekkonet.h"
 
 #include <atomic>
+#include <cstring>
 #include <memory>
 #include <string>
 #include <thread>
@@ -99,9 +100,24 @@ private:
     bool m_is_host          = true;
     int  m_current_frame    = 0;
     int  m_connect_wait_ticks = 0;
-    int  m_pending_adv_count = 0;
-    BrawlbackPad m_pending_adv_pads[MAX_ROLLBACK_FRAMES + 1][MAX_NUM_PLAYERS]{};
     std::unique_ptr<Match::GameSettings> m_game_settings;
+
+    struct PendingGekkoOperations
+    {
+        int adv_count = 0;
+        u32 adv_frames[MAX_ROLLBACK_FRAMES + 1]{};
+        bool adv_rollback[MAX_ROLLBACK_FRAMES + 1]{};
+        BrawlbackPad adv_pads[MAX_ROLLBACK_FRAMES + 1][MAX_NUM_PLAYERS]{};
+
+        void Clear()
+        {
+            adv_count = 0;
+            memset(adv_frames, 0, sizeof(adv_frames));
+            memset(adv_rollback, 0, sizeof(adv_rollback));
+            memset(adv_pads, 0, sizeof(adv_pads));
+        }
+    };
+    PendingGekkoOperations m_pending_ops;
 
     std::unique_ptr<Matchmaking> m_matchmaking;
     std::thread m_matchmaking_thread;
