@@ -301,6 +301,7 @@ std::optional<IPCReply> WFSSRVDevice::IOCtl(const IOCtlRequest& request)
     }
     size_t read_bytes;
     fd_obj->file.ReadArray(memory.GetPointerForRange(addr, size), size, &read_bytes);
+    memory.MarkRangeDirty(addr, read_bytes);
     // TODO(wfs): Handle read errors.
     if (absolute)
     {

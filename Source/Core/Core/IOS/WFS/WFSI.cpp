@@ -519,6 +519,7 @@ std::optional<IPCReply> WFSIDevice::IOCtl(const IOCtlRequest& request)
     else
     {
       fp.ReadBytes(memory.GetPointerForRange(dol_addr, max_dol_size), max_dol_size);
+      memory.MarkRangeDirty(dol_addr, max_dol_size);
     }
     memory.Write_U32(real_dol_size, request.buffer_out);
     break;
@@ -570,6 +571,7 @@ u32 WFSIDevice::GetTmd(u16 group_id, u32 title_id, u64 subtitle_id, u32 address,
     auto& system = GetSystem();
     auto& memory = system.GetMemory();
     fp.ReadBytes(memory.GetPointerForRange(address, *size), *size);
+    memory.MarkRangeDirty(address, *size);
   }
   return IPC_SUCCESS;
 }
