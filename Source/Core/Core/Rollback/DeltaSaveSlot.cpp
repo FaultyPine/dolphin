@@ -198,9 +198,11 @@ void enqueueSubsectionJobs(u32 first_page, u32 page_count, const uint8_t* region
                   region_base + static_cast<size_t>(relative_page_idx) * PAGE_SIZE, PAGE_SIZE);
       ++this_split_written;
     }
+#if defined(HAVE_TRACY)
     auto x =
         StringFromFormat("page count %u (offset %u size %u)", this_split_written, offset, size);
     ZoneText(x.c_str(), x.size());
+#endif
   };
 
   u32 split_size = (num_dirty + num_work_chunks - 1) / num_work_chunks;

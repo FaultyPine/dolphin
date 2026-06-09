@@ -34,6 +34,11 @@ using json = nlohmann::json;
 
 CEXIBrawlbackGekkoNet::CEXIBrawlbackGekkoNet(Core::System& system) : IEXIDevice(system)
 {
+    // Truncate the log file so each session starts fresh.
+    {
+      const std::string log_path = File::GetUserPath(F_MAINLOG_IDX);
+      std::ofstream ofs(log_path, std::ios::trunc);
+    }
     INFO_LOG_FMT(BRAWLBACK, "GekkoNet EXI device created");
     m_enet_initialized = enet_initialize() == 0;
     if (!m_enet_initialized)
@@ -378,6 +383,8 @@ int CEXIBrawlbackGekkoNet::HandleFrame(u8* payload)
     if (frame == GAME_FULL_START_FRAME)
         INFO_LOG_FMT(BRAWLBACK, "GekkoNet: starting gameplay sync at brawl frame {}", frame);
 
+    // intentional extra poll here to catch inputs that arrived between prev frame's update_session and this upcoming one
+    gekko_network_poll(m_session);
     gekko_add_local_input(m_session, m_local_handle, &p->pad);
 
     ge = gekko_update_session(m_session, &gc);
@@ -398,7 +405,7 @@ int CEXIBrawlbackGekkoNet::HandleFrame(u8* payload)
         {
         case GekkoSaveEvent:
             if (e.data.save.state_len)
-            *e.data.save.state_len = sizeof(u32);
+                *e.data.save.state_len = sizeof(u32);
             if (e.data.save.checksum)
                 *e.data.save.checksum = 0;
             break;
@@ -421,15 +428,28 @@ int CEXIBrawlbackGekkoNet::HandleFrame(u8* payload)
     }
 
     const auto PauseForLocalAdvantage = [](GekkoSession* session) {
-      // gekko_frames_ahead returns the "local advantage" in frames, i.e. how many frames this
-      // instance is ahead of the peer. local_adv = current_frame - last_received_remote_input_frame
-      // - local_delay ahead > 0: this Dolphin instance is on average ahead of the peer. We should
-      // slow down a bit ahead == 0 : we're synced up ahead < 0 : this instance is behind the peer
       float ahead = gekko_frames_ahead(session);
       if (ahead > 0.6f)
       {
-        std::this_thread::sleep_for(
-            std::chrono::microseconds(static_cast<int>(ahead * GEKKONET_TIMESYNC_EXTRA_US)));
+        if (ahead >= static_cast<float>(MAX_ROLLBACK_FRAMES - 1))
+        {
+          // Hard stall: we're so far ahead that the peer can't keep up.
+          // Poll in a tight loop until the gap drops, giving the peer time to catch up.
+          auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(32);
+          while (gekko_frames_ahead(session) >= static_cast<float>(MAX_ROLLBACK_FRAMES - 1))
+          {
+            gekko_network_poll(session);
+            std::this_thread::sleep_for(std::chrono::microseconds(500));
+            if (std::chrono::steady_clock::now() >= deadline)
+              break;
+          }
+        }
+        else
+        {
+          // Proportional slowdown: sleep a fraction of a frame scaled to the gap.
+          const int sleep_us = static_cast<int>(ahead * ahead * GEKKONET_TIMESYNC_EXTRA_US);
+          std::this_thread::sleep_for(std::chrono::microseconds(sleep_us));
+        }
       }
     };
 
@@ -459,6 +479,15 @@ int CEXIBrawlbackGekkoNet::HandleFrame(u8* payload)
     m_pending_ops.adv_count = num_adv;
 
     PauseForLocalAdvantage(m_session);
+
+    {
+      const float ahead = gekko_frames_ahead(m_session);
+      const u32 color = ahead > 0.5f ? OSD::Color::YELLOW :
+                         ahead < -0.5f ? OSD::Color::CYAN : OSD::Color::GREEN;
+      OSD::AddTypedMessage(OSD::MessageType::NetPlayPing,
+                           fmt::format("Frame adv: {:.1f}", ahead), 1000, color);
+    }
+
     return num_adv;
 }
 

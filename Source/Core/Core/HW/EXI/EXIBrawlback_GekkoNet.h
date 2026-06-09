@@ -60,10 +60,8 @@ static constexpr u32 PAD_OFF_BUTTONS = 0x06;
 static constexpr u32 PAD_OFF_STICKS  = 0x30;
 
 static constexpr float GEKKONET_FRAME_US = 1'000'000.0f / 60.0f;
-// Matches GekkoNet examples: add a small oversleep when we are ahead so the peer can catch up.
-static constexpr float GEKKONET_TIMESYNC_FUDGE = 0.016f;
-static constexpr float GEKKONET_TIMESYNC_EXTRA_US =
-    GEKKONET_FRAME_US * GEKKONET_TIMESYNC_FUDGE;
+// Per-frame sleep = ahead^2 * EXTRA_US. At ahead=2: ~1ms, ahead=4: ~4ms, ahead=6: ~9ms.
+static constexpr float GEKKONET_TIMESYNC_EXTRA_US = GEKKONET_FRAME_US * 0.06f;
 
 class CEXIBrawlbackGekkoNet : public ExpansionInterface::IEXIDevice
 {
