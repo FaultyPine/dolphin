@@ -72,7 +72,7 @@ BOOKMARK: diagnose the desyncs.
 - Some randomly super-expensive GameSimFrame zones... some are filled with real work it seems, some are filled with CoreTiming::Throttle -> Sleeps!
     - for the sleeps ones, maybe it's rollback related? We can probably fiddle with the throttle logic for rollbacks/resims which might help?
 - Some randomly super-expensive BrawlbackFrame calls that DONT have GameSimFrame inside. Untracked by tracy, idk what's happening there.
-
+^ NEED TO DIAGNOSE/FIX THESE BEFORE SHIP! From local testing, these really hurt the experience.
 
 ## Misc
 Superluminal doesn't basically doesn't work at all with dolphin. Since most of the code is through JIT, it can't resolve symbols b/c it relies on (symbolicated) stack traces
