@@ -26,7 +26,7 @@ static_assert(FRAME_DELAY + MAX_ROLLBACK_FRAMES >= 6); // minimum frames of "com
 #define ROLLBACK_IMPL true
 
 // Dev-only: exchange full RAM snapshots after a GekkoNet desync and log byte diffs.
-#define DEV_DESYNC_MODE 1
+#define DEV_DESYNC_MODE 0
 
 // number of max FrameData's to keep in the (remote) queue
 #define FRAMEDATA_MAX_QUEUE_SIZE 15 

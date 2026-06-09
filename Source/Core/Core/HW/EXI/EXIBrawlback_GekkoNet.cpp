@@ -498,7 +498,7 @@ void CEXIBrawlbackGekkoNet::HandleFindOpponent(u8*)
 #ifdef LOCAL_TESTING_GEKKONET
     std::string ip_file = File::GetExeDirectory() + "/gkk_connect.txt";
     bool is_host = true;
-    u16 lport = 7780, rport = 7781;
+    u16 lport = BRAWLBACK_PORT, rport = BRAWLBACK_PORT+1;
     if (File::Exists(ip_file))
     {
         std::fstream f;
