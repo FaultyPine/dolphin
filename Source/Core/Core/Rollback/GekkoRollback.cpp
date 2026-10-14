@@ -2071,6 +2071,7 @@ static void MaybeLogPerformance(Core::System& system)
 // across real frame boundaries instead of merely relatching all of its inputs in one callback.
 static bool PrepareQueuedFrame(Core::System& system)
 {
+  PROFILER_SCOPE_FUNCTION();
   while (!g_manager.pending_events.empty())
   {
     QueuedEvent event = std::move(g_manager.pending_events.front());
@@ -2306,6 +2307,7 @@ static bool PrepareQueuedFrame(Core::System& system)
 
 static void ProcessFrameBoundary(const Core::CPUThreadGuard& guard, FrameBoundary boundary)
 {
+  PROFILER_SCOPE_FUNCTION();
   auto& system = guard.GetSystem();
   HostFloatScope float_scope(system.GetPPCState());
 

@@ -14,6 +14,7 @@
 
 #include "Common/CommonTypes.h"
 #include "Common/Logging/Log.h"
+#include "Common/Profiler.h"
 
 namespace Common
 {
@@ -154,6 +155,7 @@ PrecisionTimer::~PrecisionTimer()
 
 void PrecisionTimer::SleepUntil(Clock::time_point target)
 {
+  PROFILER_SCOPE_FUNCTION();
   constexpr auto SPIN_TIME =
       std::chrono::milliseconds{TIMER_RESOLUTION_MS} + std::chrono::microseconds{20};
 

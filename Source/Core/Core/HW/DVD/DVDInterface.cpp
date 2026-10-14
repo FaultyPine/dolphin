@@ -3,6 +3,8 @@
 
 #include "Core/HW/DVD/DVDInterface.h"
 
+#include "Common/Profiler.h"
+
 #include <algorithm>
 #include <array>
 #include <memory>
@@ -91,6 +93,7 @@ static u64 PackFinishExecutingCommandUserdata(ReplyType reply_type, DIInterruptT
 
 void DVDInterface::DoState(PointerWrap& p)
 {
+  PROFILER_SCOPE_FUNCTION();
   p.Do(m_DISR);
   p.Do(m_DICVR);
   p.DoArray(m_DICMDBUF);

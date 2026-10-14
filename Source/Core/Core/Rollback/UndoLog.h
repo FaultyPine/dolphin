@@ -19,6 +19,7 @@
 #include <vector>
 
 #include "Common/CommonTypes.h"
+#include "Common/Profiler.h"
 
 namespace Rollback
 {
@@ -61,6 +62,7 @@ public:
   template <typename F>
   void ForEachPreImage(u64 id, F&& f) const
   {
+    PROFILER_SCOPE_FUNCTION();
     const auto first = FindLog(id);
     if (first == m_logs.end())
       return;

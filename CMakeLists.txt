@@ -102,6 +102,8 @@ option(ENABLE_ANALYTICS "Enables opt-in Analytics collection" ON)
 
 option(ENCODE_FRAMEDUMPS "Encode framedumps in AVI format" ON)
 
+option(ENABLE_TRACY "Enable Tracy profiling" ON)
+
 option(ENABLE_GPROF "Enable gprof profiling (must be using Debug build)" OFF)
 option(FASTLOG "Enable all logs" OFF)
 
@@ -185,6 +187,11 @@ if (WIN32)
     string(APPEND CMAKE_RUNTIME_OUTPUT_DIRECTORY /x64)
   elseif (CMAKE_SYSTEM_PROCESSOR STREQUAL "aarch64")
     string(APPEND CMAKE_RUNTIME_OUTPUT_DIRECTORY /ARM64)
+  endif()
+
+  if(CMAKE_CONFIGURATION_TYPES)
+    # Keep deployed dependencies beside executables in multi-config builds.
+    string(APPEND CMAKE_RUNTIME_OUTPUT_DIRECTORY "/$<CONFIG>")
   endif()
 endif()
 
@@ -763,6 +770,13 @@ if(WIN32 OR LINUX OR CMAKE_SYSTEM_NAME STREQUAL "FreeBSD" OR CMAKE_SYSTEM_NAME S
 endif()
 
 add_subdirectory(Externals/GekkoNet)
+
+if(ENABLE_TRACY)
+  set(TRACY_ENABLE ON CACHE BOOL "Enable profiling" FORCE)
+  set(TRACY_STATIC ON CACHE BOOL "Build the Tracy client as a static library" FORCE)
+  add_subdirectory(Externals/tracy EXCLUDE_FROM_ALL)
+  dolphin_disable_warnings(TracyClient)
+endif()
 
 ########################################
 # Pre-build events: Define configuration variables and write SCM info header

@@ -3,6 +3,8 @@
 
 #include "Core/IOS/IOS.h"
 
+#include "Common/Profiler.h"
+
 #include <algorithm>
 #include <array>
 #include <map>
@@ -865,6 +867,7 @@ void EmulationKernel::UpdateWantDeterminism(const bool new_want_determinism)
 
 void EmulationKernel::DoState(PointerWrap& p)
 {
+  PROFILER_SCOPE_FUNCTION();
   p.Do(m_request_queue);
   p.Do(m_reply_queue);
   p.Do(m_last_reply_time);

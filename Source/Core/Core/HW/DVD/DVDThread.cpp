@@ -13,6 +13,7 @@
 #include "Common/CommonTypes.h"
 #include "Common/Logging/Log.h"
 #include "Common/MsgHandler.h"
+#include "Common/Profiler.h"
 #include "Common/SPSCQueue.h"
 #include "Common/Timer.h"
 
@@ -61,6 +62,7 @@ void DVDThread::Stop()
 
 void DVDThread::DoState(PointerWrap& p)
 {
+  PROFILER_SCOPE_FUNCTION();
   // Ensure all requests are completed with results Push'd to m_result_queue.
   WaitUntilIdle();
 
@@ -295,6 +297,7 @@ void DVDThread::FinishRead(u64 id, s64 cycles_late)
 
 void DVDThread::ProcessReadRequest(ReadRequest&& request)
 {
+  PROFILER_SCOPE_FUNCTION();
   m_file_logger.Log(*m_disc, request.partition, request.dvd_offset);
 
   std::vector<u8> buffer(request.length);

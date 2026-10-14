@@ -3,6 +3,8 @@
 
 #include "Core/PowerPC/JitCommon/JitCache.h"
 
+#include "Common/Profiler.h"
+
 #include <algorithm>
 #include <array>
 #include <cstring>
@@ -76,6 +78,7 @@ void JitBaseBlockCache::Shutdown()
 // is full and when saving and loading states.
 void JitBaseBlockCache::Clear()
 {
+  PROFILER_SCOPE_FUNCTION();
 #if defined(_DEBUG) || defined(DEBUGFAST)
   Core::DisplayMessage("Clearing code cache.", 3000);
 #endif
@@ -131,6 +134,7 @@ void JitBaseBlockCache::WipeBlockProfilingData(const Core::CPUThreadGuard&)
 
 JitBlock* JitBaseBlockCache::AllocateBlock(u32 em_address)
 {
+  PROFILER_SCOPE_FUNCTION();
   const u32 physical_address = m_jit.m_mmu.JitCache_TranslateAddress(em_address).address;
   JitBlock& b = block_map.emplace(physical_address, m_jit.IsProfilingEnabled())->second;
   b.effectiveAddress = em_address;
@@ -145,6 +149,7 @@ void JitBaseBlockCache::FinalizeBlock(JitBlock& block, bool block_link,
                                       const PPCAnalyst::CodeBlock& code_block,
                                       const PPCAnalyst::CodeBuffer& code_buffer)
 {
+  PROFILER_SCOPE_FUNCTION();
   size_t index = FastLookupIndexForAddress(block.effectiveAddress, block.feature_flags);
   if (m_entry_points_ptr)
   {
@@ -267,6 +272,7 @@ const u8* JitBaseBlockCache::Dispatch()
 
 void JitBaseBlockCache::InvalidateICacheLine(u32 address)
 {
+  PROFILER_SCOPE_FUNCTION();
   const u32 cache_line_address = address & ~0x1f;
   const auto translated = m_jit.m_mmu.JitCache_TranslateAddress(cache_line_address);
   if (translated.valid)
@@ -275,6 +281,7 @@ void JitBaseBlockCache::InvalidateICacheLine(u32 address)
 
 void JitBaseBlockCache::InvalidateICache(u32 initial_address, u32 initial_length, bool forced)
 {
+  PROFILER_SCOPE_FUNCTION();
   u32 address = initial_address;
   u32 length = initial_length;
   while (length > 0)
@@ -305,6 +312,7 @@ void JitBaseBlockCache::InvalidateICache(u32 initial_address, u32 initial_length
 void JitBaseBlockCache::InvalidateICacheInternal(u32 physical_address, u32 address, u32 length,
                                                  bool forced)
 {
+  PROFILER_SCOPE_FUNCTION();
   // Optimization for the case of invalidating a single cache line, which is used by the dcb*
   // instructions. If the valid_block bit for that cacheline is not set, we can safely skip
   // the remaining invalidation logic.
@@ -455,6 +463,7 @@ void JitBaseBlockCache::LinkBlockExits(JitBlock& block)
 
 void JitBaseBlockCache::LinkBlock(JitBlock& block)
 {
+  PROFILER_SCOPE_FUNCTION();
   LinkBlockExits(block);
   const auto it = links_to.find(block.effectiveAddress);
   if (it == links_to.end())
@@ -497,6 +506,7 @@ void JitBaseBlockCache::UnlinkBlock(const JitBlock& block)
 
 void JitBaseBlockCache::DestroyBlock(JitBlock& block)
 {
+  PROFILER_SCOPE_FUNCTION();
   if (m_entry_points_ptr)
   {
     if (m_entry_points_ptr[block.fast_block_map_index] == block.normalEntry)

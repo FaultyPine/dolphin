@@ -18,6 +18,7 @@
 #include <cstdint>
 
 #include "Common/CommonTypes.h"
+#include "Common/Profiler.h"
 
 namespace Rollback
 {
@@ -70,6 +71,7 @@ struct alignas(64) JITDirtyBitmap
   void Clear() { ClearRange(0, ENTRY_COUNT); }
   void ClearRange(uint32_t first_page, uint32_t page_count)
   {
+    PROFILER_SCOPE_FUNCTION();
     for (std::size_t page = first_page; page < first_page + page_count; ++page)
       std::atomic_ref<u8>(entries[page]).store(0, std::memory_order_release);
   }

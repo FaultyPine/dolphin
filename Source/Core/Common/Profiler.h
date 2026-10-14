@@ -9,8 +9,55 @@
 
 #include "CommonTypes.h"
 
+#ifdef TRACY_ENABLE
+// mGBA defines restrict as __restrict, which conflicts with Tracy's MSVC allocator attributes.
+#ifdef _MSC_VER
+#pragma push_macro("restrict")
+#undef restrict
+#endif
+#include <tracy/TracyC.h>
+#include <tracy/Tracy.hpp>
+#ifdef _MSC_VER
+#pragma pop_macro("restrict")
+#endif
+#endif
+
 namespace Common
 {
+// A zone whose lifetime spans callbacks. Begin and End must run on the same thread,
+// outside any scoped zones that would otherwise cross its boundaries.
+class ProfilerZone
+{
+public:
+  ProfilerZone() = default;
+  ~ProfilerZone() { End(); }
+  ProfilerZone(const ProfilerZone&) = delete;
+  ProfilerZone& operator=(const ProfilerZone&) = delete;
+
+#ifdef TRACY_ENABLE
+  void Begin(TracyCZoneCtx context) { m_context = context; }
+#endif
+  void End()
+  {
+#ifdef TRACY_ENABLE
+    if (m_context.active)
+      TracyCZoneEnd(m_context);
+    m_context = {};
+#endif
+  }
+  void Value([[maybe_unused]] u64 value)
+  {
+#ifdef TRACY_ENABLE
+    TracyCZoneValue(m_context, value);
+#endif
+  }
+
+private:
+#ifdef TRACY_ENABLE
+  TracyCZoneCtx m_context{};
+#endif
+};
+
 class Profiler
 {
 public:
@@ -66,3 +113,26 @@ private:
   static thread_local u64 prof_time;                                                               \
   static thread_local int prof_depth;                                                              \
   Common::ProfilerExecuter prof_e(&prof_gen, &prof_time, &prof_depth);
+
+#ifdef TRACY_ENABLE
+#define PROFILER_SCOPE(name) ZoneScopedN(name)
+#define PROFILER_VALUE(value) ZoneValue(value)
+#define PROFILER_FRAME_MARK() FrameMark
+#define PROFILER_FRAME_MARK_N(name) FrameMarkNamed(name)
+#define PROFILER_THREAD_NAME(name) tracy::SetThreadName(name)
+#define PROFILER_ZONE_BEGIN(zone, name)                                                             \
+  do                                                                                              \
+  {                                                                                               \
+    TracyCZoneN(profiler_zone_context, name, 1);                                                    \
+    (zone).Begin(profiler_zone_context);                                                           \
+  } while (0)
+#else
+#define PROFILER_SCOPE(name) ((void)0)
+#define PROFILER_VALUE(value) ((void)0)
+#define PROFILER_FRAME_MARK() ((void)0)
+#define PROFILER_FRAME_MARK_N(name) ((void)0)
+#define PROFILER_THREAD_NAME(name) ((void)0)
+#define PROFILER_ZONE_BEGIN(zone, name) ((void)0)
+#endif
+
+#define PROFILER_SCOPE_FUNCTION() PROFILER_SCOPE(__FUNCTION__)

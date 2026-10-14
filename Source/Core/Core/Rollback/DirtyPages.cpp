@@ -3,6 +3,8 @@
 
 #include "Core/Rollback/DirtyPages.h"
 
+#include "Common/Profiler.h"
+
 #include <algorithm>
 #include <cstdlib>
 #include <cstring>
@@ -81,6 +83,7 @@ u32 PhysicalOf(const Area& area, std::size_t page_in_area)
 void ReplacePage(u8* live, const u8* contents, u32 physical,
                  const std::function<void(u32, u32)>& changed)
 {
+  PROFILER_SCOPE_FUNCTION();
   if (std::memcmp(live, contents, PAGE) == 0)
     return;
   for (std::size_t offset = 0; offset < PAGE; offset += JIT_CACHE_LINE)
@@ -96,6 +99,7 @@ void ReplacePage(u8* live, const u8* contents, u32 physical,
 // snapshot there is no log to keep them in, so only the mirror moves.
 void CommitDirtyPages(Tracker& t)
 {
+  PROFILER_SCOPE_FUNCTION();
   auto& bitmap = JITDirtyBitmap::Get();
   for (std::size_t a = 0; a < t.areas.size(); ++a)
   {
@@ -124,6 +128,7 @@ void CommitDirtyPages(Tracker& t)
 
 void ResetLocked(Tracker& t)
 {
+  PROFILER_SCOPE_FUNCTION();
   auto& bitmap = JITDirtyBitmap::Get();
   bitmap.SetEnabled(false);
   bitmap.SetEmitUpdates(true);
@@ -148,6 +153,7 @@ void ResetLocked(Tracker& t)
 
 bool Arm(const void* owner, const std::vector<Area>& areas, bool force_full_scan)
 {
+  PROFILER_SCOPE_FUNCTION();
   Tracker& t = T();
   std::lock_guard lock(t.lock);
   if (t.owner)
@@ -193,6 +199,7 @@ bool Arm(const void* owner, const std::vector<Area>& areas, bool force_full_scan
 
 bool ArmForSystem(Core::System& system, const void* owner, bool force_full_scan)
 {
+  PROFILER_SCOPE_FUNCTION();
   if (!JIT_STORES_TRACKED)
     return false;
   auto& memory = system.GetMemory();
@@ -245,6 +252,7 @@ bool ArmForSystem(Core::System& system, const void* owner, bool force_full_scan)
 
 void Disarm(const void* owner)
 {
+  PROFILER_SCOPE_FUNCTION();
   Tracker& t = T();
   std::lock_guard lock(t.lock);
   if (!t.owner || t.owner != owner)
@@ -271,6 +279,7 @@ bool IsTrackingArea(const u8* alias, u32 physical_address, u32 size)
 
 u64 Snapshot()
 {
+  PROFILER_SCOPE_FUNCTION();
   Tracker& t = T();
   std::lock_guard lock(t.lock);
   if (!t.log)
@@ -292,6 +301,7 @@ bool Has(u64 id)
 bool Restore(u64 id, const std::function<void(u32 physical_address, u32 length)>& changed,
              bool tracked_bitmap_clear)
 {
+  PROFILER_SCOPE_FUNCTION();
   Tracker& t = T();
   std::lock_guard lock(t.lock);
   if (!t.log || !t.log->Has(id))
@@ -352,6 +362,7 @@ bool Restore(u64 id, const std::function<void(u32 physical_address, u32 length)>
 
 void Drop(u64 id)
 {
+  PROFILER_SCOPE_FUNCTION();
   Tracker& t = T();
   std::lock_guard lock(t.lock);
   if (t.log)
@@ -360,6 +371,7 @@ void Drop(u64 id)
 
 void OnMappingsChanged(Core::System& system)
 {
+  PROFILER_SCOPE_FUNCTION();
   Tracker& t = T();
   std::lock_guard lock(t.lock);
   if (!t.log)
@@ -376,6 +388,7 @@ void OnMappingsChanged(Core::System& system)
 
 void StopTracking()
 {
+  PROFILER_SCOPE_FUNCTION();
   Tracker& t = T();
   std::lock_guard lock(t.lock);
   ResetLocked(t);

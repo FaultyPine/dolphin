@@ -3,6 +3,8 @@
 
 #include "VideoCommon/Fifo.h"
 
+#include "Common/Profiler.h"
+
 #include <atomic>
 #include <chrono>
 #include <cstring>
@@ -54,6 +56,7 @@ void FifoManager::RefreshConfig()
 
 void FifoManager::DoState(PointerWrap& p)
 {
+  PROFILER_SCOPE_FUNCTION();
   p.DoArray(m_video_buffer, FIFO_SIZE);
   u8* write_ptr = m_video_buffer_write_ptr;
   p.DoPointer(write_ptr, m_video_buffer);
@@ -414,6 +417,7 @@ bool AtBreakpoint(Core::System& system)
 
 void FifoManager::RunGpu()
 {
+  PROFILER_SCOPE_FUNCTION();
   const bool is_dual_core = m_system.IsDualCoreMode();
 
   // wake up GPU thread
@@ -436,6 +440,7 @@ void FifoManager::RunGpu()
 
 int FifoManager::RunGpuOnCpu(int ticks)
 {
+  PROFILER_SCOPE_FUNCTION();
   const bool profile_resim = Rollback::IsResimulating();
   const auto profile_start = profile_resim ? std::chrono::steady_clock::now() :
                                              std::chrono::steady_clock::time_point{};

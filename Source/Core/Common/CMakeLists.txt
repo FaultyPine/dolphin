@@ -170,6 +170,10 @@ add_library(common
 
 add_dependencies(common dolphin_scmrev)
 
+if(ENABLE_TRACY)
+  target_link_libraries(common PUBLIC Tracy::TracyClient)
+endif()
+
 if(NOT MSVC AND _M_ARM_64)
   set_source_files_properties(
     Crypto/AES.cpp

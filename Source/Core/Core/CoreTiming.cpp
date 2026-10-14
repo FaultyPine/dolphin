@@ -17,6 +17,7 @@
 #include "Common/Assert.h"
 #include "Common/ChunkFile.h"
 #include "Common/Logging/Log.h"
+#include "Common/Profiler.h"
 #include "Common/SPSCQueue.h"
 #include "Common/ScopeGuard.h"
 
@@ -202,6 +203,7 @@ void CoreTimingManager::RefreshConfig()
 
 void CoreTimingManager::DoState(PointerWrap& p)
 {
+  PROFILER_SCOPE_FUNCTION();
   std::lock_guard lk(m_ts_write_lock);
   p.Do(m_globals.slice_length);
   p.Do(m_globals.global_timer);
@@ -363,6 +365,7 @@ void CoreTimingManager::ForceExceptionCheck(s64 cycles)
 
 void CoreTimingManager::MoveEvents()
 {
+  PROFILER_SCOPE_FUNCTION();
   while (!m_ts_queue.Empty())
   {
     auto& ev = m_event_queue.emplace_back(m_ts_queue.Front());
@@ -377,6 +380,7 @@ void CoreTimingManager::MoveEvents()
 
 void CoreTimingManager::Advance()
 {
+  PROFILER_SCOPE_FUNCTION();
   const bool profile_resim = Rollback::IsResimulating();
   const auto profile_start = profile_resim ? std::chrono::steady_clock::now() :
                                              std::chrono::steady_clock::time_point{};
@@ -551,6 +555,7 @@ TimePoint CoreTimingManager::GetTargetHostTime(s64 target_cycle)
 
 void CoreTimingManager::SleepUntil(TimePoint time_point)
 {
+  PROFILER_SCOPE_FUNCTION();
   const bool use_precision_timer = m_use_precision_timer.load(std::memory_order_relaxed);
 
   if (Core::IsCPUThread())
@@ -565,6 +570,8 @@ void CoreTimingManager::SleepUntil(TimePoint time_point)
     // Count amount of time sleeping for analytics
     const TimePoint time_after_sleep = Clock::now();
     m_system.GetPerfMetrics().CountThrottleSleep(time_after_sleep - time);
+    PROFILER_VALUE(
+        std::chrono::duration_cast<std::chrono::microseconds>(time_after_sleep - time).count());
   }
   else
   {
@@ -577,6 +584,7 @@ void CoreTimingManager::SleepUntil(TimePoint time_point)
 
 void CoreTimingManager::Throttle(const s64 target_cycle)
 {
+  PROFILER_SCOPE_FUNCTION();
   const TimePoint time = Clock::now();
 
   if (Rollback::IsResimulating())

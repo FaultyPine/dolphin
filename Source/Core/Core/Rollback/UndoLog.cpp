@@ -3,6 +3,8 @@
 
 #include "Core/Rollback/UndoLog.h"
 
+#include "Common/Profiler.h"
+
 #include <algorithm>
 #include <cstring>
 
@@ -42,6 +44,7 @@ u32 UndoLog::NextMark() const
 
 u64 UndoLog::Open()
 {
+  PROFILER_SCOPE_FUNCTION();
   std::vector<Entry> entries;
   if (!m_spare_entry_storage.empty())
   {
@@ -66,6 +69,7 @@ bool UndoLog::LoggedInNewest(std::size_t page) const
 
 bool UndoLog::Record(std::size_t page, const u8* contents)
 {
+  PROFILER_SCOPE_FUNCTION();
   if (m_logs.empty() || LoggedInNewest(page))
     return false;
   u8* const data = TakeBuffer();
@@ -80,6 +84,7 @@ bool UndoLog::Record(std::size_t page, const u8* contents)
 
 std::vector<u32> UndoLog::NewestPages() const
 {
+  PROFILER_SCOPE_FUNCTION();
   std::vector<u32> pages;
   if (m_logs.empty())
     return pages;
@@ -91,6 +96,7 @@ std::vector<u32> UndoLog::NewestPages() const
 
 bool UndoLog::RewindTo(u64 id)
 {
+  PROFILER_SCOPE_FUNCTION();
   const auto target = FindLog(id);
   if (target == m_logs.end())
     return false;
@@ -110,6 +116,7 @@ bool UndoLog::RewindTo(u64 id)
 
 void UndoLog::Drop(u64 id)
 {
+  PROFILER_SCOPE_FUNCTION();
   const auto log = FindLog(id);
   if (log == m_logs.end())
     return;
@@ -155,6 +162,7 @@ void UndoLog::Drop(u64 id)
 
 void UndoLog::Clear()
 {
+  PROFILER_SCOPE_FUNCTION();
   for (Log& log : m_logs)
     FreeEntries(&log);
   m_logs.clear();
@@ -163,6 +171,7 @@ void UndoLog::Clear()
 
 void UndoLog::Reserve(std::size_t pages)
 {
+  PROFILER_SCOPE_FUNCTION();
   while (m_free.size() < pages)
   {
     m_blocks.push_back(std::make_unique<u8[]>(BLOCK_PAGES * m_page_size));
@@ -174,6 +183,7 @@ void UndoLog::Reserve(std::size_t pages)
 
 u8* UndoLog::TakeBuffer()
 {
+  PROFILER_SCOPE_FUNCTION();
   if (m_free.empty())
     Reserve(1);
   u8* const data = m_free.back();
@@ -183,6 +193,7 @@ u8* UndoLog::TakeBuffer()
 
 void UndoLog::FreeEntries(Log* log)
 {
+  PROFILER_SCOPE_FUNCTION();
   for (const Entry& entry : log->entries)
     m_free.push_back(entry.data);
   m_pages_held -= log->entries.size();
@@ -191,6 +202,7 @@ void UndoLog::FreeEntries(Log* log)
 
 void UndoLog::RecycleEntryStorage(Log* log)
 {
+  PROFILER_SCOPE_FUNCTION();
   if (log->entries.capacity() != 0)
     m_spare_entry_storage.push_back(std::move(log->entries));
 }

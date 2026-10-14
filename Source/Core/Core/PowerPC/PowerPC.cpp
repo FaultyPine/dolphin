@@ -3,6 +3,8 @@
 
 #include "Core/PowerPC/PowerPC.h"
 
+#include "Common/Profiler.h"
+
 #include <algorithm>
 #include <array>
 #include <bit>
@@ -70,6 +72,7 @@ PowerPCManager::~PowerPCManager() = default;
 
 void PowerPCManager::DoState(PointerWrap& p)
 {
+  PROFILER_SCOPE_FUNCTION();
   // some of this code has been disabled, because
   // it changes registers even in Mode::Measure (which is suspicious and seems like it could cause
   // desyncs)

@@ -27,6 +27,7 @@
 #endif
 
 #include "Common/CommonTypes.h"
+#include "Common/Profiler.h"
 #ifdef _WIN32
 #include "Common/StringUtil.h"
 #endif
@@ -113,6 +114,7 @@ static void SetCurrentThreadNameViaApi(const char* name)
 
 void SetCurrentThreadName(const char* name)
 {
+  PROFILER_THREAD_NAME(name);
   SetCurrentThreadNameViaException(name);
   SetCurrentThreadNameViaApi(name);
 }
@@ -168,6 +170,7 @@ void SwitchCurrentThread()
 
 void SetCurrentThreadName(const char* name)
 {
+  PROFILER_THREAD_NAME(name);
 #ifdef __APPLE__
   pthread_setname_np(name);
 #elif defined __FreeBSD__ || defined __OpenBSD__

@@ -3,6 +3,8 @@
 
 #include "Core/IOS/SDIO/SDIOSlot0.h"
 
+#include "Common/Profiler.h"
+
 #include <cstdio>
 #include <memory>
 #include <vector>
@@ -53,6 +55,7 @@ void SDIOSlot0Device::RefreshConfig()
 
 void SDIOSlot0Device::DoState(PointerWrap& p)
 {
+  PROFILER_SCOPE_FUNCTION();
   Device::DoState(p);
   if (p.IsReadMode())
   {

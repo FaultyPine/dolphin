@@ -138,6 +138,7 @@ static bool ReadHeader(const std::string& filename, StateHeader& header);
 static void DoState(Core::System& system, PointerWrap& p, RollbackStateLayout* layout = nullptr,
                     u8* layout_base = nullptr)
 {
+  PROFILER_SCOPE_FUNCTION();
   const auto note_section_end = [&](std::size_t section) {
     if (layout && layout_base)
       layout->section_ends[section] = p.GetOffsetFromPreviousPosition(layout_base);
@@ -236,6 +237,7 @@ static bool CheckIfStateLoadIsAllowed(Core::System& system)
 
 static bool LoadFromBuffer(Core::System& system, std::span<u8> buffer)
 {
+  PROFILER_SCOPE_FUNCTION();
   u8* ptr = buffer.data();
   PointerWrap p(&ptr, buffer.size(), PointerWrap::Mode::Read);
   DoState(system, p);
@@ -246,6 +248,7 @@ static bool LoadFromBuffer(Core::System& system, std::span<u8> buffer)
 static std::size_t SaveToBuffer(Core::System& system, Common::UniqueBuffer<u8>& buffer,
                                 RollbackStateLayout* layout = nullptr)
 {
+  PROFILER_SCOPE_FUNCTION();
   // Attempt to save to our provided buffer as-is.
   // If buffer isn't large enough, PointerWrap transitions to MeasureMode,
   //  and then we have our measurement for a second attempt.
@@ -277,11 +280,13 @@ static std::size_t SaveToBuffer(Core::System& system, Common::UniqueBuffer<u8>& 
 std::size_t SaveToBufferForRollback(Core::System& system, Common::UniqueBuffer<u8>& buffer,
                                     RollbackStateLayout* layout)
 {
+  PROFILER_SCOPE_FUNCTION();
   return SaveToBuffer(system, buffer, layout);
 }
 
 bool LoadFromBufferForRollback(Core::System& system, std::span<u8> buffer)
 {
+  PROFILER_SCOPE_FUNCTION();
   return LoadFromBuffer(system, buffer);
 }
 

@@ -12,6 +12,7 @@
 
 #include "Common/FPURoundMode.h"
 #include "Common/Logging/Log.h"
+#include "Common/Profiler.h"
 #include "Core/HW/DSP.h"
 #include "Core/HW/Memmap.h"
 #include "Core/IOS/FS/HostBackend/FS.h"
@@ -59,6 +60,7 @@ double MillisecondsSince(std::chrono::steady_clock::time_point start)
 void RestoreRam(u8* live, const std::vector<u8>& saved, u32 virtual_base,
                 std::vector<u32>* changed_pages, std::vector<ChangedMemoryRange>* changed_ranges)
 {
+  PROFILER_SCOPE_FUNCTION();
   const std::size_t size = saved.size();
   for (std::size_t offset = 0; offset < size; offset += RESTORE_PAGE)
   {
@@ -85,6 +87,7 @@ void RestoreRam(u8* live, const std::vector<u8>& saved, u32 virtual_base,
 // Done here in bulk because the JIT's own per-word invalidation is too slow for thousands of pages.
 void ForgetLearnedJitAddresses(Core::System& system, const std::vector<u32>& changed_pages)
 {
+  PROFILER_SCOPE_FUNCTION();
   // JitInterface only holds a JitBase (null for the interpreter). static_cast because MSVC builds
   // have RTTI off.
   auto* jit = static_cast<JitBase*>(system.GetJitInterface().GetCore());
@@ -251,6 +254,7 @@ SnapshotRing::~SnapshotRing()
 
 void SnapshotRing::Forget(Slot* slot)
 {
+  PROFILER_SCOPE_FUNCTION();
   if (slot->page_snapshot_id != 0)
     DirtyPages::Drop(slot->page_snapshot_id);
   slot->page_snapshot_id = 0;
@@ -259,6 +263,7 @@ void SnapshotRing::Forget(Slot* slot)
 
 bool SnapshotRing::UseDirtyPageTracking(Core::System& system, bool* armed_now)
 {
+  PROFILER_SCOPE_FUNCTION();
   *armed_now = false;
   // If tracking stopped under us (emulation stopped, or an unsupported RAM mapping), the
   // undo-log snapshots are gone.
@@ -327,6 +332,7 @@ std::span<const u8> SnapshotRing::StateForFrame(s64 frame) const
 
 void SnapshotRing::Reset(Core::System& system)
 {
+  PROFILER_SCOPE_FUNCTION();
   for (Slot& slot : m_slots)
   {
     slot.frame = -1;
@@ -342,6 +348,7 @@ void SnapshotRing::Reset(Core::System& system)
 
 bool SnapshotRing::Save(Core::System& system, s64 frame)
 {
+  PROFILER_SCOPE_FUNCTION();
   const bool trace = m_initial_trace_events++ < 16;
   if (trace)
     NOTICE_LOG_FMT(CORE, "Rollback trace: save frame {} begin", frame);
@@ -429,6 +436,7 @@ bool SnapshotRing::Save(Core::System& system, s64 frame)
 
 bool SnapshotRing::Load(Core::System& system, s64 frame)
 {
+  PROFILER_SCOPE_FUNCTION();
   return LoadSlot(system, frame, false);
 }
 
@@ -442,6 +450,7 @@ std::optional<u64> SnapshotRing::NandJournalMarkForFrame(s64 frame) const
 
 bool SnapshotRing::LoadSlot(Core::System& system, s64 frame, bool redisplay)
 {
+  PROFILER_SCOPE_FUNCTION();
   const bool trace = m_initial_trace_events++ < 16;
   if (trace)
     NOTICE_LOG_FMT(CORE, "Rollback trace: load frame {} begin", frame);
@@ -561,6 +570,7 @@ bool SnapshotRing::LoadSlot(Core::System& system, s64 frame, bool redisplay)
 
 bool SnapshotRing::Capture(Core::System& system, MachineImage* image, bool stop_journal)
 {
+  PROFILER_SCOPE_FUNCTION();
   Common::UniqueBuffer<u8> state;
   std::size_t state_size;
   {
@@ -587,6 +597,7 @@ bool SnapshotRing::Capture(Core::System& system, MachineImage* image, bool stop_
 
 bool SnapshotRing::LoadImage(Core::System& system, MachineImage image, s64 frame)
 {
+  PROFILER_SCOPE_FUNCTION();
   auto& memory = system.GetMemory();
   if (image.state.empty() || image.mem1.size() != memory.GetRamSize() ||
       image.mem2.size() != (memory.GetEXRAM() ? memory.GetExRamSize() : 0) ||

@@ -3,6 +3,8 @@
 
 #include "Core/PowerPC/JitInterface.h"
 
+#include "Common/Profiler.h"
+
 #include <string>
 #include <unordered_set>
 
@@ -41,6 +43,7 @@ void JitInterface::SetJit(std::unique_ptr<JitBase> jit)
 
 void JitInterface::DoState(PointerWrap& p)
 {
+  PROFILER_SCOPE_FUNCTION();
   // A rollback load invalidates only the code pages whose RAM it changed (Core/Rollback).
   if (m_jit && p.IsReadMode() && !Rollback::InSnapshotDoState())
     m_jit->ClearCache();
@@ -233,6 +236,7 @@ bool JitInterface::HandleStackFault()
 
 void JitInterface::ClearCache(const Core::CPUThreadGuard&)
 {
+  PROFILER_SCOPE_FUNCTION();
   if (m_jit)
     m_jit->ClearCache();
 }
@@ -272,12 +276,14 @@ std::size_t JitInterface::DisassembleFarCode(const JitBlock& block, std::ostream
 
 void JitInterface::InvalidateICache(u32 address, u32 size, bool forced)
 {
+  PROFILER_SCOPE_FUNCTION();
   if (m_jit)
     m_jit->GetBlockCache()->InvalidateICache(address, size, forced);
 }
 
 void JitInterface::InvalidateICacheLine(u32 address)
 {
+  PROFILER_SCOPE_FUNCTION();
   if (m_jit)
     m_jit->GetBlockCache()->InvalidateICacheLine(address);
 }
@@ -310,6 +316,7 @@ void JitInterface::InvalidateICacheLinesFromJIT(JitInterface& jit_interface, u32
 
 void JitInterface::CompileExceptionCheck(ExceptionType type)
 {
+  PROFILER_SCOPE_FUNCTION();
   if (!m_jit)
     return;
 

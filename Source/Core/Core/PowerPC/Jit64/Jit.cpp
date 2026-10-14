@@ -3,6 +3,8 @@
 
 #include "Core/PowerPC/Jit64/Jit.h"
 
+#include "Common/Profiler.h"
+
 #include <chrono>
 #include <map>
 #include <span>
@@ -305,6 +307,7 @@ void Jit64::Init()
 
 void Jit64::ClearCache()
 {
+  PROFILER_SCOPE_FUNCTION();
   blocks.Clear();
   blocks.ClearRangesToFree();
   trampolines.ClearCodeSpace();
@@ -783,6 +786,8 @@ void Jit64::Trace()
 
 void Jit64::Jit(u32 em_address)
 {
+  PROFILER_SCOPE_FUNCTION();
+  PROFILER_VALUE(em_address);
   const bool measure_resim_compile = Rollback::IsResimulating();
   const auto compile_start = std::chrono::steady_clock::now();
   Jit(em_address, true);
@@ -798,6 +803,8 @@ void Jit64::Jit(u32 em_address)
 
 void Jit64::Jit(u32 em_address, bool clear_cache_and_retry_on_failure)
 {
+  PROFILER_SCOPE_FUNCTION();
+  PROFILER_VALUE(em_address);
   CleanUpAfterStackFault();
 
   if (trampolines.IsAlmostFull() || SConfig::GetInstance().bJITNoBlockCache)
@@ -926,6 +933,8 @@ bool Jit64::SetEmitterStateToFreeCodeRegion()
 
 bool Jit64::DoJit(u32 em_address, JitBlock* b, u32 nextPC)
 {
+  PROFILER_SCOPE_FUNCTION();
+  PROFILER_VALUE(em_address);
   js.firstFPInstructionFound = false;
   js.isLastInstruction = false;
   js.blockStart = em_address;
