@@ -117,11 +117,20 @@ void CommitDirtyPages(Tracker& t)
       ++t.counters.dirty_pages;
       u8* const live = area.alias + i * PAGE;
       u8* const mirror = t.mirrors[a].data() + i * PAGE;
-      if (std::memcmp(live, mirror, PAGE) == 0)
-        continue;
-      if (t.log->Record(t.area_first_page[a] + i, mirror))
-        ++t.counters.pages_recorded;
-      std::memcpy(mirror, live, PAGE);
+      {
+        PROFILER_SCOPE("compare");
+        if (std::memcmp(live, mirror, PAGE) == 0)
+          continue;
+      }
+      {
+        PROFILER_SCOPE("record to undolog");
+        if (t.log->Record(t.area_first_page[a] + i, mirror))
+          ++t.counters.pages_recorded;
+      }
+      {
+        PROFILER_SCOPE("copy live -> mirror");
+        std::memcpy(mirror, live, PAGE);
+      }
     }
   }
 }
