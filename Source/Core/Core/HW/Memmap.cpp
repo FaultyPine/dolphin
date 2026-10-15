@@ -18,6 +18,7 @@
 #include <span>
 #include <tuple>
 
+#include "Common/Assert.h"
 #include "Common/ChunkFile.h"
 #include "Common/CommonTypes.h"
 #include "Common/Logging/Log.h"
@@ -48,6 +49,16 @@
 
 namespace Memory
 {
+u32 MemoryManager::GetFakeVMemPhysicalAddress() const
+{
+  const auto region = std::find_if(m_physical_regions.begin(), m_physical_regions.end(),
+                                   [](const PhysicalMemoryRegion& region) {
+                                     return (region.flags & PhysicalMemoryRegion::FAKE_VMEM) != 0;
+                                   });
+  ASSERT(region != m_physical_regions.end());
+  return region->physical_address;
+}
+
 MemoryManager::MemoryManager(Core::System& system)
     : m_page_size(static_cast<u32>(m_arena.GetPageSize())),
       m_guest_pages_per_host_page(m_page_size / PowerPC::HW_PAGE_SIZE),

@@ -10,6 +10,7 @@
 #include <functional>
 #include <map>
 #include <memory>
+#include <span>
 #include <type_traits>
 #include <unordered_map>
 #include <unordered_set>
@@ -22,6 +23,10 @@
 #include "Core/PowerPC/PPCAnalyst.h"
 
 class JitBase;
+namespace Rollback
+{
+struct ChangedMemoryRange;
+}
 
 // offsetof is only conditionally supported for non-standard layout types,
 // so this struct needs to have a standard layout.
@@ -183,6 +188,8 @@ public:
   const u8* Dispatch();
 
   void InvalidateICache(u32 address, u32 length, bool forced);
+  // Ranges must use actual physical addresses and contain complete, aligned 32-byte lines.
+  void InvalidatePhysicalRanges(std::span<const Rollback::ChangedMemoryRange> ranges);
   void InvalidateICacheLine(u32 address);
   void ErasePhysicalRange(u32 address, u32 length);
   void EraseSingleBlock(const JitBlock& block);

@@ -15,6 +15,7 @@
 #include <span>
 #include <utility>
 
+#include "Common/Assert.h"
 #include "Common/CommonTypes.h"
 #include "Common/JitRegister.h"
 #include "Core/Config/MainSettings.h"
@@ -24,6 +25,7 @@
 #include "Core/PowerPC/MMU.h"
 #include "Core/PowerPC/PPCSymbolDB.h"
 #include "Core/PowerPC/PowerPC.h"
+#include "Core/Rollback/Rollback.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -306,6 +308,26 @@ void JitBaseBlockCache::InvalidateICache(u32 initial_address, u32 initial_length
       InvalidateICacheInternal(translated.address, address, length_this_page, forced);
     address = address + length_this_page;
     length = length - length_this_page;
+  }
+}
+
+void JitBaseBlockCache::InvalidatePhysicalRanges(
+    std::span<const Rollback::ChangedMemoryRange> ranges)
+{
+  PROFILER_SCOPE_FUNCTION();
+  for (const auto& range : ranges)
+  {
+    ASSERT((range.physical_address & 31) == 0 && (range.length & 31) == 0);
+    const u64 end = static_cast<u64>(range.physical_address) + range.length;
+    for (u64 address = range.physical_address; address < end; address += 32)
+    {
+      const u32 physical = static_cast<u32>(address);
+      if (!valid_block.Test(physical / 32))
+        continue;
+      valid_block.Clear(physical / 32);
+      // Match forced invalidation: metadata is handled separately, and no MMU translation is needed.
+      ErasePhysicalRange(physical, 32);
+    }
   }
 }
 

@@ -78,6 +78,7 @@ public:
   u32 GetRamMask() const { return m_ram_mask; }
   u32 GetFakeVMemSize() const { return m_fakevmem_size; }
   u32 GetFakeVMemMask() const { return m_fakevmem_mask; }
+  u32 GetFakeVMemPhysicalAddress() const;
   u32 GetL1CacheSize() const { return m_l1_cache_size; }
   u32 GetL1CacheMask() const { return m_l1_cache_mask; }
   u32 GetExRamSizeReal() const { return m_exram_size_real; }

@@ -8,6 +8,7 @@
 #include <functional>
 #include <iosfwd>
 #include <memory>
+#include <span>
 #include <string_view>
 #include <utility>
 #include <vector>
@@ -28,6 +29,10 @@ class System;
 namespace PowerPC
 {
 enum class CPUCore;
+}
+namespace Rollback
+{
+struct ChangedMemoryRange;
 }
 
 class JitInterface
@@ -85,6 +90,9 @@ public:
 
   // If "forced" is true, a recompile is being requested on code that hasn't been modified.
   void InvalidateICache(u32 address, u32 size, bool forced);
+  // physical ranges of complete, aligned 32-byte cache lines.
+  // Learned instruction metadata should be cleared separately
+  void InvalidatePhysicalRanges(std::span<const Rollback::ChangedMemoryRange> ranges);
   void InvalidateICacheLine(u32 address);
   void InvalidateICacheLines(u32 address, u32 count);
   static void InvalidateICacheLineFromJIT(JitInterface& jit_interface, u32 address);

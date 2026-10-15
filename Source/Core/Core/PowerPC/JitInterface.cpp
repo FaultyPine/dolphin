@@ -281,6 +281,13 @@ void JitInterface::InvalidateICache(u32 address, u32 size, bool forced)
     m_jit->GetBlockCache()->InvalidateICache(address, size, forced);
 }
 
+void JitInterface::InvalidatePhysicalRanges(
+    std::span<const Rollback::ChangedMemoryRange> ranges)
+{
+  if (m_jit)
+    m_jit->GetBlockCache()->InvalidatePhysicalRanges(ranges);
+}
+
 void JitInterface::InvalidateICacheLine(u32 address)
 {
   PROFILER_SCOPE_FUNCTION();

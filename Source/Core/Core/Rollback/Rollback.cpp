@@ -44,8 +44,8 @@ ResimJitMemoryStats s_resim_jit_memory_stats;
 
 constexpr std::size_t RESTORE_PAGE = 4096;
 constexpr std::size_t JIT_CACHE_LINE = 32;
-constexpr u32 MEM1_VIRTUAL = 0x80000000u;
-constexpr u32 MEM2_VIRTUAL = 0x90000000u;
+constexpr u32 MEM1_VIRTUAL = Memory::MEM1_BASE_ADDR;
+constexpr u32 MEM2_VIRTUAL = Memory::MEM2_BASE_ADDR;
 // Effective to physical for MEM1/MEM2 and their uncached mirrors (0x8/0xC -> 0x0, 0x9/0xD -> 0x1).
 constexpr u32 PHYSICAL_MASK = 0x1FFFFFFFu;
 
@@ -501,23 +501,29 @@ bool SnapshotRing::LoadSlot(Core::System& system, s64 frame, bool redisplay)
   m_last_load_timings.dirty_pages_ms = MillisecondsSince(dirty_start);
   m_last_load_timings.changed_blocks = m_changed_blocks.size();
   m_last_load_timings.changed_cache_lines = m_changed_ranges.size();
-  // Standalone ARAM is not CPU executable memory. FakeVMEM's canonical bitmap range maps back to
-  // its physical fastmem address for invalidation.
   auto& jit = system.GetJitInterface();
   const std::size_t jit_blocks_before = jit.GetBlockCount();
   const auto jit_start = std::chrono::steady_clock::now();
-  for (const ChangedMemoryRange& range : m_changed_ranges)
+  // Standalone ARAM is not CPU executable memory. Normalize FakeVMEM's bitmap addresses in place
+  // so the bulk invalidation can test physical code bits without translating every changed line.
+  const u32 fake_vmem_base = memory.GetFakeVMemPhysicalAddress();
+  auto executable_end = m_changed_ranges.begin();
+  for (ChangedMemoryRange range : m_changed_ranges)
   {
     const u32 physical = range.physical_address;
     if (physical >= DirtyPages::GC_ARAM_PHYSICAL &&
         physical < DirtyPages::GC_ARAM_PHYSICAL + DSP::ARAM_SIZE)
       continue;
+    // fake vmem has special cases during dirty mem tracking in EmitJITDirtyBitmapUpdate. Need to account for that here.
     const bool fake_vmem = physical >= DirtyPages::GC_FAKE_VMEM_PHYSICAL &&
-                           physical < DirtyPages::GC_FAKE_VMEM_PHYSICAL +
-                                          memory.GetFakeVMemSize();
-    const u32 effective = fake_vmem ? physical | 0x60000000u : physical | MEM1_VIRTUAL;
-    jit.InvalidateICache(effective, range.length, true);
+                           physical < DirtyPages::GC_FAKE_VMEM_PHYSICAL + memory.GetFakeVMemSize();
+    if (fake_vmem)
+      range.physical_address =
+          fake_vmem_base + (physical - DirtyPages::GC_FAKE_VMEM_PHYSICAL);
+    *executable_end++ = range;
   }
+  m_changed_ranges.erase(executable_end, m_changed_ranges.end());
+  jit.InvalidatePhysicalRanges(m_changed_ranges);
   ForgetLearnedJitAddresses(system, m_changed_blocks);
   m_last_load_timings.jit_ms = MillisecondsSince(jit_start);
   const std::size_t jit_blocks_after = jit.GetBlockCount();
